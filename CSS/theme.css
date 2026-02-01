@@ -1,0 +1,27 @@
+:root {
+    --background: #ffffff;
+    --foreground: #030213;
+    --primary: #2E8B57;
+    --primary-dark: #1f5f3b;
+    --card: #ffffff;
+    --muted: #f3f3f5;
+    --muted-foreground: #717182;
+    --radius: 0.625rem;
+    --border: rgba(0, 0, 0, 0.1);
+}
+
+body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.bg-unibo { background-color: var(--primary) !important; }
+.text-unibo { color: var(--primary) !important; }
+.btn-unibo {
+    background-color: var(--primary);
+    color: white;
+    border-radius: var(--radius);
+    border: none;
+}
+.btn-unibo:hover { background-color: var(--primary-dark); color: white; }
