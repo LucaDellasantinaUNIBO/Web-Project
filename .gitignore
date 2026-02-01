@@ -1,0 +1,34 @@
+# Ignore Gradle project-specific cache directory
+.gradle/
+
+# Ignore Gradle build output directory
+build/
+
+# Ignore compiled binaries and other IDE-generated files
+bin/
+
+# IntelliJ IDEA project files
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# VS Code project files
+.vscode/
+
+# Eclipse project files
+.project
+.classpath
+.settings/
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
