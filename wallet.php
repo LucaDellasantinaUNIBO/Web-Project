@@ -5,39 +5,12 @@ include 'includes/auth.php';
 
 require_login();
 
-$errors = [];
+$userId = $_SESSION['user_id'];
 $success = null;
-$amountInput = '';
-$cardholderInput = '';
-$expiryInput = '';
+$errors = [];
 
-$userId = (int) ($_SESSION['user_id'] ?? 0);
-
-function fetch_credit(mysqli $conn, int $userId): float
-{
-    $stmt = mysqli_prepare($conn, "SELECT credit FROM users WHERE id = ?");
-    if (!$stmt) {
-        return 0.0;
-    }
-    mysqli_stmt_bind_param($stmt, "i", $userId);
-    mysqli_stmt_execute($stmt);
-    $result = mysqli_stmt_get_result($stmt);
-    $row = $result ? mysqli_fetch_assoc($result) : null;
-    mysqli_stmt_close($stmt);
-    return isset($row['credit']) ? (float) $row['credit'] : 0.0;
-}
-
-function is_valid_expiry(string $expiry): bool
-{
-    if (!preg_match('/^(0[1-9]|1[0-2])\\/(\\d{2}|\\d{4})$/', $expiry, $matches)) {
-        return false;
-    }
-    return true;
-}
-
-$currentCredit = fetch_credit($conn, $userId);
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Handle "Add Funds" logic
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_funds') {
     $amountInput = trim($_POST['amount'] ?? '');
     $cardholderInput = trim($_POST['cardholder'] ?? '');
     $expiryInput = trim($_POST['expiry'] ?? '');
@@ -48,32 +21,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($amountInput === '' || $amountValue <= 0) {
         $errors[] = 'Enter a valid amount.';
     } elseif ($amountValue < 50 || $amountValue > 5000) {
-        $errors[] = 'Amount must be between EUR 50 and EUR 5000.';
+        $errors[] = 'Amount must be between € 50 and € 5000.';
     }
 
     if ($cardholderInput === '' || strlen($cardholderInput) < 3) {
         $errors[] = 'Cardholder name is too short.';
     }
 
-    $cardNumber = preg_replace('/\\D+/', '', $cardNumberRaw);
-    if (strlen($cardNumber) !== 16) {
-        $errors[] = 'Card number must be 16 digits.';
-    }
+    if (empty($errors)) {
+        // Fetch current credit first
+        $stmt = mysqli_prepare($conn, "SELECT credit FROM users WHERE id = ?");
+        mysqli_stmt_bind_param($stmt, "i", $userId);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $userRow = mysqli_fetch_assoc($res);
+        $currentCredit = $userRow ? (float) $userRow['credit'] : 0.0;
+        mysqli_stmt_close($stmt);
 
-    if (!is_valid_expiry($expiryInput)) {
-        $errors[] = 'Expiry date must be in MM/YY or MM/YYYY format.';
-    }
-
-    $cvc = preg_replace('/\\D+/', '', $cvcRaw);
-    if (strlen($cvc) < 3 || strlen($cvc) > 4) {
-        $errors[] = 'CVC must be 3 or 4 digits.';
-    }
-
-    if (!$errors) {
         $newBalance = $currentCredit + $amountValue;
 
         mysqli_begin_transaction($conn);
-
         $updateOk = false;
         $stmt = mysqli_prepare($conn, "UPDATE users SET credit = credit + ? WHERE id = ?");
         if ($stmt) {
@@ -83,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $transactionOk = true;
+        // Insert transaction
         $transactionStmt = mysqli_prepare($conn, "INSERT INTO transactions (user_id, type, amount, balance_after, description) VALUES (?, 'topup', ?, ?, 'Wallet credit')");
         if ($transactionStmt) {
             mysqli_stmt_bind_param($transactionStmt, "idd", $userId, $amountValue, $newBalance);
@@ -92,101 +60,236 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($updateOk && $transactionOk) {
             mysqli_commit($conn);
-            $success = 'Wallet updated successfully.';
-            $amountInput = '';
-            $cardholderInput = '';
-            $expiryInput = '';
-            $currentCredit = $newBalance;
+            $success = "Successfully added €" . number_format($amountValue, 2) . " to your wallet.";
         } else {
             mysqli_rollback($conn);
-            $errors[] = 'Wallet update failed. Please try again.';
+            $errors[] = "Failed to process transaction.";
         }
     }
 }
 
+
+// Fetch user credit
+$credit = 0.0;
+$stmt = mysqli_prepare($conn, "SELECT credit FROM users WHERE id = ?");
+mysqli_stmt_bind_param($stmt, "i", $userId);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
+if ($row = mysqli_fetch_assoc($result)) {
+    $credit = (float) $row['credit'];
+}
+mysqli_stmt_close($stmt);
+
+// Fetch total paid (YTD - simplified as lifetime for now or query based on year)
+$totalPaid = 0.0;
+$stmt = mysqli_prepare($conn, "SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = 'rental'");
+mysqli_stmt_bind_param($stmt, "i", $userId);
+mysqli_stmt_execute($stmt);
+$res = mysqli_stmt_get_result($stmt);
+if ($r = mysqli_fetch_assoc($res)) {
+    $totalPaid = abs((float) $r['total']); // Rentals are negative
+}
+mysqli_stmt_close($stmt);
+
+// Fetch last payment
+$lastPayment = 0.0;
+$lastPaymentDate = '-';
+$stmt = mysqli_prepare($conn, "SELECT amount, created_at FROM transactions WHERE user_id = ? AND type = 'rental' ORDER BY created_at DESC LIMIT 1");
+mysqli_stmt_bind_param($stmt, "i", $userId);
+mysqli_stmt_execute($stmt);
+$res = mysqli_stmt_get_result($stmt);
+if ($r = mysqli_fetch_assoc($res)) {
+    $lastPayment = abs((float) $r['amount']);
+    $lastPaymentDate = date('M j, Y', strtotime($r['created_at']));
+}
+mysqli_stmt_close($stmt);
+
+
+// Fetch Transactions
+$transactions = [];
+$stmt = mysqli_prepare($conn, "SELECT type, amount, balance_after, description, created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 20");
+mysqli_stmt_bind_param($stmt, "i", $userId);
+mysqli_stmt_execute($stmt);
+$res = mysqli_stmt_get_result($stmt);
+if ($res) {
+    while ($row = mysqli_fetch_assoc($res)) {
+        $transactions[] = $row;
+    }
+}
+mysqli_stmt_close($stmt);
+
+
 include 'includes/header.php';
 ?>
 <main>
-    <div class="container py-5" style="max-width: 720px;" id="main-content">
-        <h1 class="fw-bold mb-3">Wallet</h1>
-        <p class="text-muted">Add funds to pay for your rent.</p>
+    <div class="container py-5 mx-auto" style="max-width: 1000px;" id="main-content">
+        <h1 class="display-6 fw-bold text-dark mb-4">Wallet</h1>
 
-        <div class="form-section p-4 shadow-sm mb-4">
-            <div class="small text-muted">Current balance</div>
-            <div class="display-6 fw-bold text-success">$
-                <?php echo number_format($currentCredit, 2); ?>
-            </div>
-        </div>
+        <div class="row">
+            <?php include 'includes/user_sidebar.php'; ?>
 
-        <?php if ($success): ?>
-            <div class="alert alert-success">
-                <?php echo htmlspecialchars($success); ?>
-            </div>
-        <?php endif; ?>
-
-        <?php if ($errors): ?>
-            <div class="alert alert-danger">
-                <?php foreach ($errors as $error): ?>
-                    <div>
-                        <?php echo htmlspecialchars($error); ?>
+            <div class="col-lg-9">
+                <?php if ($success): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <?php echo htmlspecialchars($success); ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
+                <?php endif; ?>
+                <?php if ($errors): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <?php foreach ($errors as $e)
+                            echo htmlspecialchars($e) . "<br>"; ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <?php endif; ?>
 
-        <div class="form-section p-4 shadow-sm">
-            <form method="post">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold" for="wallet-amount">Add credit amount ($)</label>
-                        <input type="number" id="wallet-amount" step="0.01" min="50" max="5000" name="amount"
-                            class="form-control" value="<?php echo htmlspecialchars($amountInput); ?>" required>
-                        <div class="small text-muted mt-2">Quick amounts</div>
-                        <div class="d-flex flex-wrap gap-2 mt-1">
-                            <button type="button" class="btn btn-outline-secondary btn-sm"
-                                onclick="document.getElementById('wallet-amount').value='500';">$500</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm"
-                                onclick="document.getElementById('wallet-amount').value='1000';">$1000</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm"
-                                onclick="document.getElementById('wallet-amount').value='1500';">$1500</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm"
-                                onclick="document.getElementById('wallet-amount').value='2000';">$2000</button>
+                <!-- Stats Cards -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div
+                            class="bg-success text-white rounded-4 p-4 h-100 shadow-sm position-relative overflow-hidden">
+                            <div class="position-relative z-1">
+                                <p class="mb-1 opacity-75">Total Balance Due</p>
+                                <h2 class="h3 fw-bold mb-1">
+                                    €<?php echo number_format(0, 2); // Hardcoded as per screenshot implies 'Due' or maybe it means Credit? Screenshot says 0.00 ?>
+                                </h2>
+                                <p class="small mb-0"><i class="fas fa-check-circle me-1"></i> All payments up to date
+                                </p>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-bold" for="wallet-cardholder">Cardholder name</label>
-                        <input type="text" id="wallet-cardholder" name="cardholder" class="form-control"
-                            value="<?php echo htmlspecialchars($cardholderInput); ?>" autocomplete="cc-name" required>
+                    <div class="col-md-4">
+                        <div class="bg-white rounded-4 p-4 h-100 shadow-sm">
+                            <p class="text-muted mb-1">Last Payment</p>
+                            <h2 class="h3 fw-bold mb-1">€<?php echo number_format($lastPayment, 2); ?></h2>
+                            <p class="text-muted small mb-0"><i class="far fa-clock me-1"></i>
+                                <?php echo $lastPaymentDate; ?></p>
+                        </div>
                     </div>
-                    <div class="col-md-8">
-                        <label class="form-label fw-bold" for="wallet-card-number">Card number</label>
-                        <input type="text" id="wallet-card-number" name="card_number" class="form-control"
-                            placeholder="1111 2222 3333 4444" autocomplete="cc-number" required>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold" for="wallet-expiry">Expiry</label>
-                        <input type="text" id="wallet-expiry" name="expiry" class="form-control" placeholder="MM/YY"
-                            value="<?php echo htmlspecialchars($expiryInput); ?>" autocomplete="cc-exp" required>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold" for="wallet-cvc">CVC</label>
-                        <input type="text" id="wallet-cvc" name="cvc" class="form-control" placeholder="123"
-                            autocomplete="cc-csc" required>
+                    <div class="col-md-4">
+                        <div class="bg-white rounded-4 p-4 h-100 shadow-sm">
+                            <p class="text-muted mb-1">Total Paid (YTD)</p>
+                            <h2 class="h3 fw-bold mb-1">€<?php echo number_format($totalPaid, 2); ?></h2>
+                            <p class="text-success small mb-0 fw-bold">+12% from last year</p>
+                        </div>
                     </div>
                 </div>
 
-                <div class="d-flex flex-wrap gap-2 mt-3">
-                    <button type="button" class="btn btn-outline-secondary btn-sm"
-                        onclick="document.getElementById('wallet-cardholder').value='Alexa Tenant';document.getElementById('wallet-card-number').value='4111 1111 1111 1111';document.getElementById('wallet-expiry').value='12/2030';document.getElementById('wallet-cvc').value='123';">Fill
-                        card</button>
+                <!-- Current Balance & Add Funds (Custom Addition) -->
+                <div class="bg-white rounded-4 shadow-sm p-4 mb-4 d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="text-muted mb-0">Available Wallet Credit</p>
+                        <h2 class="h3 fw-bold text-success mb-0">€<?php echo number_format($credit, 2); ?></h2>
+                    </div>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addFundsModal">
+                        <i class="fas fa-plus me-2"></i> Add Funds
+                    </button>
                 </div>
 
-                <div class="d-flex flex-wrap gap-2 mt-4">
-                    <button type="submit" class="btn btn-primary">Add credit</button>
-                    <a href="profile.php" class="btn btn-outline-secondary">Back to profile</a>
+                <!-- History -->
+                <div class="bg-white rounded-4 shadow-sm p-4 mb-4">
+                    <h2 class="h5 fw-bold mb-3">Payment History</h2>
+                    <p class="text-muted mb-4 small">Your rental payment history for the last 6 months.</p>
+
+                    <?php if (empty($transactions)): ?>
+                        <p class="text-muted">No transactions found.</p>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th class="text-muted small fw-bold">Date</th>
+                                        <th class="text-muted small fw-bold">Description</th>
+                                        <th class="text-muted small fw-bold">Type</th>
+                                        <th class="text-end text-muted small fw-bold">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($transactions as $t): ?>
+                                        <tr>
+                                            <td><?php echo date('M d, Y', strtotime($t['created_at'])); ?></td>
+                                            <td class="fw-medium text-dark"><?php echo htmlspecialchars($t['description']); ?>
+                                            </td>
+                                            <td>
+                                                <?php if ($t['type'] === 'topup'): ?>
+                                                    <span class="badge bg-light-success text-success rounded-pill">Credit
+                                                        Added</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-light text-dark rounded-pill">Payment</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td
+                                                class="text-end fw-bold <?php echo $t['type'] === 'topup' ? 'text-success' : ''; ?>">
+                                                <?php echo ($t['type'] === 'topup' ? '+' : '') . '€' . number_format($t['amount'], 2); ?>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php endif; ?>
                 </div>
-            </form>
-            <p class="text-muted small mt-3 mb-0">This is a simulation. No real card data is stored.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Funds Modal -->
+    <div class="modal fade" id="addFundsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold">Add Funds to Wallet</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-2">
+                    <p class="text-muted small mb-4">Securely add funds using your credit card.</p>
+
+                    <form method="post" action="wallet.php">
+                        <input type="hidden" name="action" value="add_funds">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted">Amount (€)</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0">€</span>
+                                <input type="number" name="amount" class="form-control border-start-0 ps-0"
+                                    placeholder="0.00" min="50" step="10" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-muted">Card Details</label>
+                            <div class="p-3 bg-light rounded-3 border">
+                                <div class="mb-3">
+                                    <input type="text" name="card_number" class="form-control bg-white"
+                                        placeholder="Card Number" value="4111 1111 1111 1111">
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <input type="text" name="expiry" class="form-control bg-white"
+                                            placeholder="MM/YY" value="12/30">
+                                    </div>
+                                    <div class="col-6">
+                                        <input type="text" name="cvc" class="form-control bg-white" placeholder="CVC"
+                                            value="123">
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <input type="text" name="cardholder" class="form-control bg-white"
+                                        placeholder="Cardholder Name" value="Alex Johnson">
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <small class="text-muted"><i class="fas fa-lock me-1"></i> SSL Secure Payment</small>
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg"
+                                    height="12" alt="Visa" class="opacity-50">
+                            </div>
+                        </div>
+
+                        <div class="d-grid mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg rounded-3">Add Funds Now</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </main>

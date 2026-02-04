@@ -298,364 +298,232 @@ include 'includes/header.php';
 ?>
 <main>
     <div class="container py-8 mx-auto" style="max-width: 900px;" id="main-content">
-        <h1 class="display-5 fw-bold text-dark mb-4">
-            <?php echo $isAdmin ? 'Admin Dashboard' : 'Profile'; ?>
+        <h1 class="display-6 fw-bold text-dark mb-4">
+            <?php echo $isAdmin ? 'Admin Dashboard' : 'Account Overview'; ?>
         </h1>
-        <div class="bg-white rounded-4 shadow-sm p-5 mb-4">
-            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-                <div>
-                    <p class="text-muted mb-1">Name</p>
-                    <h2 class="h4 fw-bold mb-0">
-                        <?php echo htmlspecialchars($user['name'] ?? $_SESSION['user_name']); ?>
-                    </h2>
-                    <p class="text-muted mb-0">
-                        <?php echo htmlspecialchars($user['email'] ?? ''); ?>
-                    </p>
-                </div>
-                <div class="text-end">
-                    <?php if ($isAdmin): ?>
-                        <p class="text-muted mb-1">Role</p>
-                        <h2 class="h4 fw-bold mb-0">Administrator</h2>
-                    <?php else: ?>
-                        <p class="text-muted mb-1">Total Rent Paid</p>
-                        <h2 class="h4 fw-bold text-danger mb-0">$
-                            <?php echo number_format($totalSpent, 2); ?>
-                        </h2>
-                        <div class="mt-3">
-                            <p class="text-muted mb-1">Wallet Credit</p>
-                            <h2 class="h4 fw-bold text-success mb-0">$
-                                <?php echo number_format((float) ($user['credit'] ?? 0), 2); ?>
-                            </h2>
-                            <a href="wallet.php" class="btn btn-outline-secondary btn-sm mt-2">Open wallet</a>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <hr>
-            <p class="small text-muted mb-0">Status: Verified Tenant.</p>
-        </div>
 
-        <?php if ($profileFlash): ?>
-            <div class="alert alert-<?php echo htmlspecialchars($profileFlash['type']); ?>">
-                <?php echo htmlspecialchars($profileFlash['message']); ?>
-            </div>
-        <?php endif; ?>
+        <div class="row">
+            <?php if (!$isAdmin): ?>
+                <?php include 'includes/user_sidebar.php'; ?>
+            <?php endif; ?>
 
-        <?php if ($isAdmin): ?>
-            <div class="bg-white rounded-4 shadow-sm p-4 mb-4" id="issue-reports">
-                <h2 class="h5 fw-bold mb-3">Maintenance Issues</h2>
+            <div class="<?php echo $isAdmin ? 'col-12' : 'col-lg-9'; ?>">
+                <div class="bg-white rounded-4 shadow-sm p-5 mb-4">
+                    <h2 class="h5 fw-bold mb-1">Personal Information</h2>
+                    <p class="text-muted mb-4">Manage your personal details and contact preferences.</p>
 
-                <?php if ($adminIssueErrors): ?>
-                    <div class="alert alert-danger">
-                        <?php foreach ($adminIssueErrors as $error): ?>
-                            <div>
-                                <?php echo htmlspecialchars($error); ?>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-
-                <?php if ($issueReportsError): ?>
-                    <div class="alert alert-warning">
-                        <?php echo htmlspecialchars($issueReportsError); ?>
-                    </div>
-                <?php elseif (!$issueReports): ?>
-                    <p class="text-muted mb-0">No reports yet.</p>
-                <?php else: ?>
-                    <?php foreach ($issueReports as $report): ?>
-                        <?php
-                        $reportStatus = strtolower(trim($report['status']));
-                        $statusClass = $reportStatus === 'closed' ? 'bg-success' : 'bg-warning text-dark';
-                        $reviewedLabel = $report['reviewed_at']
-                            ? 'Reviewed ' . $report['reviewed_at'] . ($report['reviewer_name'] ? ' by ' . $report['reviewer_name'] : '')
-                            : 'Not reviewed yet';
-                        ?>
-                        <div class="border rounded-4 p-3 mb-3">
-                            <div class="d-flex flex-wrap justify-content-between gap-2">
-                                <div>
-                                    <div class="fw-bold">
-                                        <?php echo htmlspecialchars($report['property_name']); ?> (
-                                        <?php echo htmlspecialchars(type_label($report['property_type'])); ?>)
-                                    </div>
-                                    <div class="text-muted small">Reported by
-                                        <?php echo htmlspecialchars($report['user_name']); ?> (
-                                        <?php echo htmlspecialchars($report['user_email']); ?>)
-                                    </div>
-                                    <div class="text-muted small">Reported on
-                                        <?php echo htmlspecialchars($report['created_at']); ?>
-                                    </div>
-                                </div>
-                                <span class="badge <?php echo $statusClass; ?> rounded-pill align-self-start">
-                                    <?php echo htmlspecialchars(ucfirst($reportStatus)); ?>
-                                </span>
-                            </div>
-                            <div class="mt-3">
-                                <div class="small text-muted">Issue Description</div>
-                                <div class="fw-bold">
-                                    <?php echo nl2br(htmlspecialchars($report['description'])); ?>
+                    <form>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label text-muted small fw-bold">Full Name</label>
+                                <div class="p-3 bg-light rounded-3 border-0">
+                                    <i class="far fa-user text-muted me-2"></i>
+                                    <?php echo htmlspecialchars($user['name'] ?? $_SESSION['user_name']); ?>
                                 </div>
                             </div>
-                            <form method="post" class="mt-3">
-                                <input type="hidden" name="action" value="update_issue">
-                                <input type="hidden" name="issue_id"
-                                    value="<?php echo htmlspecialchars((string) $report['id']); ?>">
-                                <div class="row g-2">
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-bold">Status</label>
-                                        <select name="status" class="form-select">
-                                            <option value="open" <?php echo $reportStatus === 'open' ? 'selected' : ''; ?>>Open
-                                            </option>
-                                            <option value="closed" <?php echo $reportStatus === 'closed' ? 'selected' : ''; ?>>Closed
-                                            </option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-8">
-                                        <label class="form-label fw-bold">Admin notes</label>
-                                        <textarea name="admin_notes" class="form-control" rows="2" maxlength="2000"
-                                            placeholder="Add internal notes."><?php echo htmlspecialchars($report['admin_notes'] ?? ''); ?></textarea>
-                                    </div>
+                            <div class="col-md-6">
+                                <label class="form-label text-muted small fw-bold">Email Address</label>
+                                <div class="p-3 bg-light rounded-3 border-0">
+                                    <i class="far fa-envelope text-muted me-2"></i>
+                                    <?php echo htmlspecialchars($user['email'] ?? ''); ?>
                                 </div>
-                                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
-                                    <div class="small text-muted">
-                                        <?php echo htmlspecialchars($reviewedLabel); ?>
-                                    </div>
-                                    <button type="submit" class="btn btn-outline-primary btn-sm">Save</button>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label text-muted small fw-bold">Phone Number</label>
+                                <div class="p-3 bg-light rounded-3 border-0">
+                                    <i class="fas fa-phone-alt text-muted me-2"></i> (555) 123-4567
                                 </div>
-                            </form>
-                        </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-
-            <div class="bg-white rounded-4 shadow-sm p-4">
-                <h2 class="h5 fw-bold mb-3">Change log</h2>
-                <?php if ($changeLogError): ?>
-                    <div class="alert alert-warning">
-                        <?php echo htmlspecialchars($changeLogError); ?>
-                    </div>
-                <?php elseif (!$changeLog): ?>
-                    <p class="text-muted mb-0">No changes recorded yet.</p>
-                <?php else: ?>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th scope="col">Date</th>
-                                    <th scope="col">Admin</th>
-                                    <th scope="col">Action</th>
-                                    <th scope="col">Entity</th>
-                                    <th scope="col">Details</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($changeLog as $entry): ?>
-                                    <tr>
-                                        <td>
-                                            <?php echo htmlspecialchars($entry['created_at']); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars($entry['admin_name']); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars(ucfirst($entry['action'])); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars($entry['entity']); ?> #
-                                            <?php echo htmlspecialchars((string) $entry['entity_id']); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars($entry['details']); ?>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php endif; ?>
-            </div>
-        <?php else: ?>
-            <div class="bg-white rounded-4 shadow-sm p-4 mb-3" id="active-rental">
-                <h2 class="h5 fw-bold mb-3">Active Lease</h2>
-
-                <?php if ($issueErrors): ?>
-                    <div class="alert alert-danger">
-                        <?php foreach ($issueErrors as $error): ?>
-                            <div>
-                                <?php echo htmlspecialchars($error); ?>
                             </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-
-                <?php if ($activeRental): ?>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="small text-muted">Property</div>
-                            <div class="fw-bold">
-                                <?php echo htmlspecialchars($activeRental['property_name']); ?>
-                            </div>
-                            <div class="text-muted small">Type:
-                                <?php echo htmlspecialchars(type_label($activeRental['property_type'])); ?>
+                            <div class="col-md-6">
+                                <label class="form-label text-muted small fw-bold">Location</label>
+                                <div class="p-3 bg-light rounded-3 border-0">
+                                    <i class="fas fa-map-marker-alt text-muted me-2"></i> Los Angeles, CA
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
-                            <div class="small text-muted">Lease Start</div>
-                            <div class="fw-bold">
-                                <?php echo htmlspecialchars($activeRental['start_date']); ?>
-                            </div>
+                        <div class="text-end mt-4">
+                            <button type="button" class="btn btn-success text-white px-4 rounded-3"><i
+                                    class="fas fa-pen me-2"></i> Save Changes</button>
                         </div>
-                        <div class="col-md-3">
-                            <div class="small text-muted">Lease End</div>
-                            <div class="fw-bold">
-                                <?php echo htmlspecialchars($activeRental['end_date'] ?? 'Ongoing'); ?>
-                            </div>
-                        </div>
-                    </div>
-
-                    <hr>
-                    <h3 class="h6 fw-bold mb-2">Report a maintenance issue</h3>
-                    <form method="post">
-                        <input type="hidden" name="action" value="report_issue">
-                        <input type="hidden" name="rental_id"
-                            value="<?php echo htmlspecialchars((string) $activeRental['id']); ?>">
-                        <div class="mb-3">
-                            <label class="form-label">Description</label>
-                            <textarea name="description" class="form-control" rows="3" maxlength="500"
-                                placeholder="Describe the maintenance issue." required></textarea>
-                        </div>
-                        <button class="btn btn-outline-danger" type="submit">Submit Request</button>
                     </form>
-                <?php else: ?>
-                    <p class="text-muted mb-0">No active leases right now.</p>
-                <?php endif; ?>
-            </div>
+                </div>
 
-            <div class="bg-white rounded-4 shadow-sm p-4">
-                <h2 class="h5 fw-bold mb-3">Rental History</h2>
-                <?php if (!$rentals): ?>
-                    <p class="text-muted mb-0">No past rentals.</p>
-                <?php else: ?>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th scope="col">Property</th>
-                                    <th scope="col">Type</th>
-                                    <th scope="col">Start Date</th>
-                                    <th scope="col">End Date</th>
-                                    <th scope="col">Duration</th>
-                                    <th scope="col">Cost</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($rentals as $rental): ?>
-                                    <tr>
-                                        <td class="fw-bold">
-                                            <?php echo htmlspecialchars($rental['property_name']); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars(type_label($rental['property_type'])); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars($rental['start_date']); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars($rental['end_date'] ?? ''); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars((string) ($rental['months'] ?? 0)); ?> months
-                                        </td>
-                                        <td>$
-                                            <?php echo htmlspecialchars(number_format((float) $rental['total_cost'], 2)); ?>
-                                        </td>
-                                    </tr>
+
+                <?php if ($profileFlash): ?>
+                    <div class="alert alert-<?php echo htmlspecialchars($profileFlash['type']); ?>">
+                        <?php echo htmlspecialchars($profileFlash['message']); ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($isAdmin): ?>
+                    <div class="bg-white rounded-4 shadow-sm p-4 mb-4" id="issue-reports">
+                        <h2 class="h5 fw-bold mb-3">Maintenance Issues</h2>
+
+                        <?php if ($adminIssueErrors): ?>
+                            <div class="alert alert-danger">
+                                <?php foreach ($adminIssueErrors as $error): ?>
+                                    <div>
+                                        <?php echo htmlspecialchars($error); ?>
+                                    </div>
                                 <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php endif; ?>
-            </div>
-
-            <div class="bg-white rounded-4 shadow-sm p-4 mt-4">
-                <h2 class="h5 fw-bold mb-3">Transactions</h2>
-                <?php if ($transactionsError): ?>
-                    <div class="alert alert-warning">
-                        <?php echo htmlspecialchars($transactionsError); ?>
-                    </div>
-                <?php elseif (!$transactions): ?>
-                    <p class="text-muted mb-0">No transactions yet.</p>
-                <?php else: ?>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th scope="col">Date</th>
-                                    <th scope="col">Type</th>
-                                    <th scope="col">Description</th>
-                                    <th scope="col">Amount</th>
-                                    <th scope="col">Balance after</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($transactions as $transaction): ?>
-                                    <?php
-                                    $amount = (float) $transaction['amount'];
-                                    $amountLabel = ($amount > 0 ? '+' : '') . number_format($amount, 2);
-                                    $amountClass = $amount >= 0 ? 'text-success' : 'text-danger';
-                                    ?>
-                                    <tr>
-                                        <td>
-                                            <?php echo htmlspecialchars($transaction['created_at']); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars(transaction_label($transaction['type'])); ?>
-                                        </td>
-                                        <td>
-                                            <?php echo htmlspecialchars($transaction['description']); ?>
-                                        </td>
-                                        <td class="<?php echo $amountClass; ?>">$
-                                            <?php echo htmlspecialchars($amountLabel); ?>
-                                        </td>
-                                        <td>$
-                                            <?php echo htmlspecialchars(number_format((float) $transaction['balance_after'], 2)); ?>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php endif; ?>
-            </div>
-
-            <div class="bg-white rounded-4 shadow-sm p-4 mt-4" id="delete-account">
-                <h2 class="h5 fw-bold mb-2">Delete account</h2>
-                <p class="text-muted small">This permanently removes your profile and all data.</p>
-
-                <?php if ($accountErrors): ?>
-                    <div class="alert alert-danger">
-                        <?php foreach ($accountErrors as $error): ?>
-                            <div>
-                                <?php echo htmlspecialchars($error); ?>
                             </div>
-                        <?php endforeach; ?>
+                        <?php endif; ?>
+
+                        <?php if ($issueReportsError): ?>
+                            <div class="alert alert-warning">
+                                <?php echo htmlspecialchars($issueReportsError); ?>
+                            </div>
+                        <?php elseif (!$issueReports): ?>
+                            <p class="text-muted mb-0">No reports yet.</p>
+                        <?php else: ?>
+                            <?php foreach ($issueReports as $report): ?>
+                                <?php
+                                $reportStatus = strtolower(trim($report['status']));
+                                $statusClass = $reportStatus === 'closed' ? 'bg-success' : 'bg-warning text-dark';
+                                $reviewedLabel = $report['reviewed_at']
+                                    ? 'Reviewed ' . $report['reviewed_at'] . ($report['reviewer_name'] ? ' by ' . $report['reviewer_name'] : '')
+                                    : 'Not reviewed yet';
+                                ?>
+                                <div class="border rounded-4 p-3 mb-3">
+                                    <div class="d-flex flex-wrap justify-content-between gap-2">
+                                        <div>
+                                            <div class="fw-bold">
+                                                <?php echo htmlspecialchars($report['property_name']); ?> (
+                                                <?php echo htmlspecialchars(type_label($report['property_type'])); ?>)
+                                            </div>
+                                            <div class="text-muted small">Reported by
+                                                <?php echo htmlspecialchars($report['user_name']); ?> (
+                                                <?php echo htmlspecialchars($report['user_email']); ?>)
+                                            </div>
+                                            <div class="text-muted small">Reported on
+                                                <?php echo htmlspecialchars($report['created_at']); ?>
+                                            </div>
+                                        </div>
+                                        <span class="badge <?php echo $statusClass; ?> rounded-pill align-self-start">
+                                            <?php echo htmlspecialchars(ucfirst($reportStatus)); ?>
+                                        </span>
+                                    </div>
+                                    <div class="mt-3">
+                                        <div class="small text-muted">Issue Description</div>
+                                        <div class="fw-bold">
+                                            <?php echo nl2br(htmlspecialchars($report['description'])); ?>
+                                        </div>
+                                    </div>
+                                    <form method="post" class="mt-3">
+                                        <input type="hidden" name="action" value="update_issue">
+                                        <input type="hidden" name="issue_id"
+                                            value="<?php echo htmlspecialchars((string) $report['id']); ?>">
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <label class="form-label fw-bold">Status</label>
+                                                <select name="status" class="form-select">
+                                                    <option value="open" <?php echo $reportStatus === 'open' ? 'selected' : ''; ?>>
+                                                        Open
+                                                    </option>
+                                                    <option value="closed" <?php echo $reportStatus === 'closed' ? 'selected' : ''; ?>>Closed
+                                                    </option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-8">
+                                                <label class="form-label fw-bold">Admin notes</label>
+                                                <textarea name="admin_notes" class="form-control" rows="2" maxlength="2000"
+                                                    placeholder="Add internal notes."><?php echo htmlspecialchars($report['admin_notes'] ?? ''); ?></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
+                                            <div class="small text-muted">
+                                                <?php echo htmlspecialchars($reviewedLabel); ?>
+                                            </div>
+                                            <button type="submit" class="btn btn-outline-primary btn-sm">Save</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="bg-white rounded-4 shadow-sm p-4">
+                        <h2 class="h5 fw-bold mb-3">Change log</h2>
+                        <?php if ($changeLogError): ?>
+                            <div class="alert alert-warning">
+                                <?php echo htmlspecialchars($changeLogError); ?>
+                            </div>
+                        <?php elseif (!$changeLog): ?>
+                            <p class="text-muted mb-0">No changes recorded yet.</p>
+                        <?php else: ?>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th scope="col">Date</th>
+                                            <th scope="col">Admin</th>
+                                            <th scope="col">Action</th>
+                                            <th scope="col">Entity</th>
+                                            <th scope="col">Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($changeLog as $entry): ?>
+                                            <tr>
+                                                <td>
+                                                    <?php echo htmlspecialchars($entry['created_at']); ?>
+                                                </td>
+                                                <td>
+                                                    <?php echo htmlspecialchars($entry['admin_name']); ?>
+                                                </td>
+                                                <td>
+                                                    <?php echo htmlspecialchars(ucfirst($entry['action'])); ?>
+                                                </td>
+                                                <td>
+                                                    <?php echo htmlspecialchars($entry['entity']); ?> #
+                                                    <?php echo htmlspecialchars((string) $entry['entity_id']); ?>
+                                                </td>
+                                                <td>
+                                                    <?php echo htmlspecialchars($entry['details']); ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    <!-- Transaction history moved to wallet.php -->
+
+
+                    <!-- Admin dashboard implementation retained elsewhere -->
+                    <div class="bg-white rounded-4 shadow-sm p-4 mt-4 d-none" id="delete-account">
+                        <h2 class="h5 fw-bold mb-2">Delete account</h2>
+                        <p class="text-muted small">This permanently removes your profile and all data.</p>
+
+                        <?php if ($accountErrors): ?>
+                            <div class="alert alert-danger">
+                                <?php foreach ($accountErrors as $error): ?>
+                                    <div>
+                                        <?php echo htmlspecialchars($error); ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+
+
+                        <form method="post" onsubmit="return confirm('Delete your account permanently?');">
+                            <input type="hidden" name="action" value="delete_account">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold" for="delete-password">Confirm password</label>
+                                <input type="password" id="delete-password" name="password" class="form-control"
+                                    autocomplete="current-password" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold" for="delete-confirm">Type DELETE to confirm</label>
+                                <input type="text" id="delete-confirm" name="confirm" class="form-control" required>
+                            </div>
+                            <button type="submit" class="btn btn-outline-danger">Delete my account</button>
+                        </form>
                     </div>
                 <?php endif; ?>
-
-                <form method="post" onsubmit="return confirm('Delete your account permanently?');">
-                    <input type="hidden" name="action" value="delete_account">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold" for="delete-password">Confirm password</label>
-                        <input type="password" id="delete-password" name="password" class="form-control"
-                            autocomplete="current-password" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold" for="delete-confirm">Type DELETE to confirm</label>
-                        <input type="text" id="delete-confirm" name="confirm" class="form-control" required>
-                    </div>
-                    <button type="submit" class="btn btn-outline-danger">Delete my account</button>
-                </form>
             </div>
-        <?php endif; ?>
+        </div>
     </div>
 </main>
 <?php include 'includes/footer.php'; ?>

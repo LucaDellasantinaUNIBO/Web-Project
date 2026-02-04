@@ -16,23 +16,28 @@ CREATE TABLE users (
     email VARCHAR(120) NOT NULL UNIQUE,
     password CHAR(128) NOT NULL,
     salt CHAR(128) NOT NULL,
-    role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
-    status ENUM('active', 'blocked') NOT NULL DEFAULT 'active',
-    credit DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    last_spin DATE DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    role ENUM('admin', 'user', 'landlord') DEFAULT 'user',
+    status VARCHAR(20) DEFAULT 'active',
+    credit DECIMAL(10, 2) DEFAULT 0.00,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    mock_card_number VARCHAR(20) DEFAULT NULL,
+    mock_cvc VARCHAR(5) DEFAULT NULL,
+    mock_expiry VARCHAR(7) DEFAULT NULL
 );
 
 CREATE TABLE properties (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    type ENUM('apartment', 'villa', 'studio', 'room') NOT NULL,
+    type VARCHAR(50) NOT NULL,
     status ENUM('available', 'rented', 'maintenance', 'renovation') NOT NULL DEFAULT 'available',
     location VARCHAR(255) NOT NULL,
     rooms TINYINT NOT NULL DEFAULT 1,
     monthly_price DECIMAL(8, 2) NOT NULL DEFAULT 500.00,
     image_url VARCHAR(255) DEFAULT NULL,
-    description TEXT DEFAULT NULL
+    description TEXT DEFAULT NULL,
+    lat DECIMAL(10, 8) DEFAULT NULL,
+    lng DECIMAL(11, 8) DEFAULT NULL,
+    sqft INT DEFAULT NULL
 );
 
 CREATE TABLE rentals (
@@ -43,6 +48,7 @@ CREATE TABLE rentals (
     end_date DATE DEFAULT NULL,
     months INT DEFAULT NULL,
     total_cost DECIMAL(10, 2) DEFAULT NULL,
+    status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'approved',
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 );

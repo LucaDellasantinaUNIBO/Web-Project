@@ -9,13 +9,14 @@ if (session_status() === PHP_SESSION_NONE) {
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = trim($_POST['name'] ?? '');
+    $firstName = trim($_POST['first_name'] ?? '');
+    $lastName = trim($_POST['last_name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $confirm = $_POST['confirm'] ?? '';
 
-    if ($name === '') {
-        $errors[] = 'Enter your name.';
+    if ($firstName === '' || $lastName === '') {
+        $errors[] = 'Enter your first and last name.';
     }
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'Invalid email.';
@@ -40,14 +41,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $salt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
             $passwordHash = hash('sha512', $password . $salt);
-            $stmt = mysqli_prepare($conn, "INSERT INTO users (name, email, password, salt, role) VALUES (?, ?, ?, ?, 'user')");
-            mysqli_stmt_bind_param($stmt, "ssss", $name, $email, $passwordHash, $salt);
+            // Combine for legacy 'name' column support until fully removed, or just use new cols
+            // We kept 'name' column, so let's fill it too for compatibility
+            $fullName = $firstName . ' ' . $lastName;
+
+            $stmt = mysqli_prepare($conn, "INSERT INTO users (name, first_name, last_name, email, password, salt, role) VALUES (?, ?, ?, ?, ?, ?, 'user')");
+            mysqli_stmt_bind_param($stmt, "ssssss", $fullName, $firstName, $lastName, $email, $passwordHash, $salt);
             $success = mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
 
             if ($success) {
                 $_SESSION['user_id'] = mysqli_insert_id($conn);
-                $_SESSION['user_name'] = $name;
+                $_SESSION['user_name'] = $fullName; // Keep session using full name for now or update it? Let's keep full name for simplicity in display
                 $_SESSION['user_role'] = 'user';
                 header('Location: profile.php');
                 exit;
@@ -74,9 +79,15 @@ include 'includes/header.php';
             <?php endif; ?>
 
             <form method="post" novalidate>
-                <div class="mb-3">
-                    <label class="form-label fw-bold" for="reg-name">Name</label>
-                    <input type="text" id="reg-name" name="name" class="form-control" autocomplete="name" required>
+                <div class="row mb-3">
+                    <div class="col">
+                        <label class="form-label fw-bold" for="reg-first">First Name</label>
+                        <input type="text" id="reg-first" name="first_name" class="form-control" autocomplete="given-name" required>
+                    </div>
+                    <div class="col">
+                        <label class="form-label fw-bold" for="reg-last">Last Name</label>
+                        <input type="text" id="reg-last" name="last_name" class="form-control" autocomplete="family-name" required>
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold" for="reg-email">Email</label>

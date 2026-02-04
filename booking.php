@@ -200,7 +200,7 @@ include 'includes/header.php';
                             </div>
                             <div class="col-md-3">
                                 <div class="small text-muted">Monthly Rent</div>
-                                <div class="fw-bold">$
+                                <div class="fw-bold">€
                                     <?php echo htmlspecialchars((string) $property['monthly_price']); ?>
                                 </div>
                             </div>
@@ -226,7 +226,7 @@ include 'includes/header.php';
                                     <div class="small text-muted">Total Cost</div>
                                     <div class="display-6 fw-bold text-success" id="price-estimate"
                                         data-monthly-price="<?php echo htmlspecialchars((string) ((float) $property['monthly_price'])); ?>">
-                                        $0.00</div>
+                                        €0.00</div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="small text-muted">Lease End</div>
@@ -235,7 +235,7 @@ include 'includes/header.php';
                             </div>
                             <div class="mb-4 mt-3">
                                 <div class="small text-muted">Wallet balance</div>
-                                <div class="fw-bold">$
+                                <div class="fw-bold">€
                                     <?php echo number_format($userCredit, 2); ?>
                                 </div>
                                 <div class="small text-muted mt-1">Rent is charged upfront.</div>
@@ -310,13 +310,13 @@ include 'includes/header.php';
         var updateEstimate = function () {
             var months = parseInt(monthsInput.value, 10);
             if (isNaN(months) || months <= 0) {
-                estimate.textContent = '$0.00';
+                estimate.textContent = '€0.00';
                 endEstimate.textContent = '--';
                 updateCreditState(0);
                 return;
             }
             var total = months * monthlyPrice;
-            estimate.textContent = '$' + total.toFixed(2);
+            estimate.textContent = '€' + total.toFixed(2);
 
             var startDateStr = dateInput.value;
             if (startDateStr) {

@@ -1,6 +1,15 @@
 .card {
-    border-radius: 1rem;
-    background: #ffffff;
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    overflow: hidden;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
 }
 
 .py-8 {
@@ -9,9 +18,10 @@
 }
 
 .form-section {
-    border: 1px solid rgba(0, 0, 0, 0.06);
-    border-radius: 1rem;
-    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow-md);
 }
 
 .status-dot {
