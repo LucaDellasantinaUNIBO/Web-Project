@@ -13,6 +13,11 @@ $errors = [];
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
+$currentTab = $_GET['tab'] ?? 'overview';
+if (!in_array($currentTab, ['overview', 'properties', 'bookings', 'users', 'settings'])) {
+    $currentTab = 'overview';
+}
+
 $allowedTypes = ['apartment', 'villa', 'studio', 'room'];
 $allowedStatuses = ['available', 'rented', 'maintenance', 'renovation'];
 
@@ -239,7 +244,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+    exit;
 }
+
 
 $editProperty = null;
 if (isset($_GET['edit'])) {
@@ -305,16 +312,14 @@ if (isset($_GET['delete_user'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && strpos($action, 'user_') === 0) {
-    if ($action === 'user_create') { // Fixed logic: explicitly check action type
-        $firstName = $_POST['first_name'] ?? '';
-        $lastName = $_POST['last_name'] ?? '';
+    if ($action === 'user_create') {
+        $name = $_POST['name'] ?? '';
         $email = $_POST['email'] ?? '';
         $role = $_POST['role'] ?? 'user';
         $status = $_POST['status'] ?? 'active';
         $password = $_POST['password'] ?? '';
-        $fullName = $firstName . ' ' . $lastName;
 
-        if (empty($firstName) || empty($lastName) || empty($email) || empty($password)) {
+        if (empty($name) || empty($email) || empty($password)) {
             $errors[] = 'All fields are required.';
         } else {
             $stmt = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ?");
@@ -328,10 +333,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && strpos($action, 'user_') === 0) {
                 $salt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
                 $passwordHash = hash('sha512', $password . $salt);
 
-                $stmt = mysqli_prepare($conn, "INSERT INTO users (first_name, last_name, name, email, password, salt, role, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                mysqli_stmt_bind_param($stmt, "ssssssss", $firstName, $lastName, $fullName, $email, $passwordHash, $salt, $role, $status);
+                $stmt = mysqli_prepare($conn, "INSERT INTO users (name, email, password, salt, role, status) VALUES (?, ?, ?, ?, ?, ?)");
+                mysqli_stmt_bind_param($stmt, "ssssss", $name, $email, $passwordHash, $salt, $role, $status);
                 if (mysqli_stmt_execute($stmt)) {
-                    log_change($conn, $_SESSION['user_id'], 'create', 'user', mysqli_insert_id($conn), "Created user {$fullName}.");
+                    log_change($conn, $_SESSION['user_id'], 'create', 'user', mysqli_insert_id($conn), "Created user {$name}.");
                     $_SESSION['flash'] = ['type' => 'success', 'message' => 'User created successfully!'];
                     header('Location: admin.php?tab=users');
                     exit;
@@ -342,13 +347,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && strpos($action, 'user_') === 0) {
         }
     } elseif ($action === 'user_update') {
         $editUserId = (int) ($_POST['user_id'] ?? 0);
-        $firstName = $_POST['first_name'] ?? '';
-        $lastName = $_POST['last_name'] ?? '';
+        $name = $_POST['name'] ?? '';
         $email = $_POST['email'] ?? '';
         $role = $_POST['role'] ?? 'user';
         $status = $_POST['status'] ?? 'active';
         $password = $_POST['password'] ?? '';
-        $fullName = $firstName . ' ' . $lastName;
 
         if ($editUserId <= 0) {
             $errors[] = 'Invalid user ID.';
@@ -356,15 +359,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && strpos($action, 'user_') === 0) {
             if (!empty($password)) {
                 $salt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
                 $passwordHash = hash('sha512', $password . $salt);
-                $stmt = mysqli_prepare($conn, "UPDATE users SET first_name=?, last_name=?, name=?, email=?, password=?, salt=?, role=?, status=? WHERE id=?");
-                mysqli_stmt_bind_param($stmt, "ssssssssi", $firstName, $lastName, $fullName, $email, $passwordHash, $salt, $role, $status, $editUserId);
+                $stmt = mysqli_prepare($conn, "UPDATE users SET name=?, email=?, password=?, salt=?, role=?, status=? WHERE id=?");
+                mysqli_stmt_bind_param($stmt, "ssssssi", $name, $email, $passwordHash, $salt, $role, $status, $editUserId);
             } else {
-                $stmt = mysqli_prepare($conn, "UPDATE users SET first_name=?, last_name=?, name=?, email=?, role=?, status=? WHERE id=?");
-                mysqli_stmt_bind_param($stmt, "ssssssi", $firstName, $lastName, $fullName, $email, $role, $status, $editUserId);
+                $stmt = mysqli_prepare($conn, "UPDATE users SET name=?, email=?, role=?, status=? WHERE id=?");
+                mysqli_stmt_bind_param($stmt, "ssssi", $name, $email, $role, $status, $editUserId);
             }
 
             if (mysqli_stmt_execute($stmt)) {
-                log_change($conn, $_SESSION['user_id'], 'update', 'user', $editUserId, "Updated user {$fullName}.");
+                log_change($conn, $_SESSION['user_id'], 'update', 'user', $editUserId, "Updated user {$name}.");
                 $_SESSION['flash'] = ['type' => 'success', 'message' => 'User updated successfully!'];
                 header('Location: admin.php?tab=users');
                 exit;
@@ -432,7 +435,7 @@ if ($currentTab === 'users') {
 
     if (isset($_GET['edit_user'])) {
         $editUserId = (int) $_GET['edit_user'];
-        $stmt = mysqli_prepare($conn, "SELECT first_name, last_name, email, role, status FROM users WHERE id = ?");
+        $stmt = mysqli_prepare($conn, "SELECT name, email, role, status FROM users WHERE id = ?");
         mysqli_stmt_bind_param($stmt, "i", $editUserId);
         mysqli_stmt_execute($stmt);
         $res = mysqli_stmt_get_result($stmt);
@@ -441,11 +444,14 @@ if ($currentTab === 'users') {
             $editUser['id'] = $editUserId;
     }
     // Fetch users with new columns
-    $res = mysqli_query($conn, "SELECT id, first_name, last_name, email, role, status, created_at FROM users ORDER BY id DESC");
+    // Fetch users (Schema has 'name', not first/last)
+    $res = mysqli_query($conn, "SELECT id, name, email, role, status, created_at FROM users ORDER BY id DESC");
     while ($row = mysqli_fetch_assoc($res)) {
         $usersList[] = $row;
     }
 }
+
+
 
 // ... (User Actions logic remains above, stopping at $usersList calculation)
 
@@ -455,39 +461,64 @@ $activeRentals = 0;
 $pendingRequests = 0;
 $activeUsersCount = 0;
 $recentBookings = [];
+$revenueGrowth = 0;
+$newRentalsCount = 0;
+$newUsersCount = 0;
 
 if ($currentTab === 'overview') {
-    // Total Revenue
+    // Total Revenue This Month
+    // Total Revenue This Month
     $revRes = mysqli_query($conn, "SELECT SUM(total_cost) as total FROM rentals WHERE status = 'approved'");
-    $revRow = mysqli_fetch_assoc($revRes);
+    $revRow = ($revRes) ? mysqli_fetch_assoc($revRes) : null;
     $totalRevenue = $revRow['total'] ?? 0;
 
-    // Active Rentals
+    // Revenue Growth (This Month vs Last Month)
+    $currentMonthRevSql = "SELECT SUM(total_cost) as total FROM rentals WHERE status = 'approved' AND MONTH(start_date) = MONTH(CURRENT_DATE()) AND YEAR(start_date) = YEAR(CURRENT_DATE())";
+    $lastMonthRevSql = "SELECT SUM(total_cost) as total FROM rentals WHERE status = 'approved' AND MONTH(start_date) = MONTH(CURRENT_DATE() - INTERVAL 1 MONTH) AND YEAR(start_date) = YEAR(CURRENT_DATE() - INTERVAL 1 MONTH)";
+
+    $curRevRes = mysqli_query($conn, $currentMonthRevSql);
+    $curRevRow = ($curRevRes) ? mysqli_fetch_assoc($curRevRes) : null;
+    $curRev = $curRevRow['total'] ?? 0;
+
+    $lastRevRes = mysqli_query($conn, $lastMonthRevSql);
+    $lastRevRow = ($lastRevRes) ? mysqli_fetch_assoc($lastRevRes) : null;
+    $lastRev = $lastRevRow['total'] ?? 0;
+
+    $revenueGrowth = 0;
+    if ($lastRev > 0) {
+        $revenueGrowth = (($curRev - $lastRev) / $lastRev) * 100;
+    } elseif ($curRev > 0) {
+        $revenueGrowth = 100; // 100% growth if started from 0
+    }
+
+    // Active Rentals (Total)
     $activeRes = mysqli_query($conn, "SELECT COUNT(*) as total FROM rentals WHERE status = 'approved' AND end_date >= CURDATE()");
-    $activeRow = mysqli_fetch_assoc($activeRes);
+    $activeRow = ($activeRes) ? mysqli_fetch_assoc($activeRes) : null;
     $activeRentals = $activeRow['total'] ?? 0;
+
+    // New Rentals (Last 7 Days)
+    $newRentalsRes = mysqli_query($conn, "SELECT COUNT(*) as total FROM rentals WHERE status = 'approved' AND start_date >= DATE(NOW() - INTERVAL 7 DAY)");
+    $newRentalsRow = ($newRentalsRes) ? mysqli_fetch_assoc($newRentalsRes) : null;
+    $newRentalsCount = $newRentalsRow['total'] ?? 0;
 
     // Pending Requests
     $pendingRes = mysqli_query($conn, "SELECT COUNT(*) as total FROM rentals WHERE status = 'pending'");
-    $pendingRow = mysqli_fetch_assoc($pendingRes);
+    $pendingRow = ($pendingRes) ? mysqli_fetch_assoc($pendingRes) : null;
     $pendingRequests = $pendingRow['total'] ?? 0;
+    // Note: Cannot calculate "new today" accurately without created_at in rentals
 
     // Active Users
     $userRes = mysqli_query($conn, "SELECT COUNT(*) as total FROM users WHERE status = 'active'");
-    $userRow = mysqli_fetch_assoc($userRes);
+    $userRow = ($userRes) ? mysqli_fetch_assoc($userRes) : null;
     $activeUsersCount = $userRow['total'] ?? 0;
 
+    // New Users (Last 30 Days)
+    $newUsersRes = mysqli_query($conn, "SELECT COUNT(*) as total FROM users WHERE status = 'active' AND created_at >= DATE(NOW() - INTERVAL 30 DAY)");
+    $newUsersRow = ($newUsersRes) ? mysqli_fetch_assoc($newUsersRes) : null;
+    $newUsersCount = $newUsersRow['total'] ?? 0;
+
     // Recent Bookings
-    $recentBookings = [];
-    $recentQuery = "SELECT r.*, p.name as property_name, u.name as user_name 
-                    FROM rentals r 
-                    JOIN properties p ON r.property_id = p.id 
-                    JOIN users u ON r.user_id = u.id 
-                    ORDER BY r.id DESC LIMIT 5";
-    $recentRes = mysqli_query($conn, $recentQuery);
-    while ($row = mysqli_fetch_assoc($recentRes)) {
-        $recentBookings[] = $row;
-    }
+
 }
 
 include 'includes/header.php';
@@ -527,7 +558,10 @@ include 'includes/header.php';
                                 <div>
                                     <div class="label">Total Revenue</div>
                                     <div class="value">$<?php echo number_format($totalRevenue, 2); ?></div>
-                                    <div class="change positive">+20.1% from last month</div>
+                                    <div class="change <?php echo $revenueGrowth >= 0 ? 'positive' : 'negative'; ?>">
+                                        <?php echo ($revenueGrowth >= 0 ? '+' : '') . number_format($revenueGrowth, 1); ?>%
+                                        from last month
+                                    </div>
                                 </div>
                                 <div class="icon-box">
                                     <i class="fas fa-dollar-sign"></i>
@@ -541,7 +575,7 @@ include 'includes/header.php';
                                 <div>
                                     <div class="label">Active Rentals</div>
                                     <div class="value"><?php echo $activeRentals; ?></div>
-                                    <div class="change positive">+2 since last week</div>
+                                    <div class="change positive">+<?php echo $newRentalsCount; ?> started this week</div>
                                 </div>
                                 <div class="icon-box">
                                     <i class="fas fa-home"></i>
@@ -555,7 +589,7 @@ include 'includes/header.php';
                                 <div>
                                     <div class="label">Pending Requests</div>
                                     <div class="value"><?php echo $pendingRequests; ?></div>
-                                    <div class="change positive">+4 new today</div>
+                                    <div class="change text-muted">Awaiting approval</div>
                                 </div>
                                 <div class="icon-box">
                                     <i class="fas fa-calendar-check"></i>
@@ -569,7 +603,7 @@ include 'includes/header.php';
                                 <div>
                                     <div class="label">Active Users</div>
                                     <div class="value"><?php echo $activeUsersCount; ?></div>
-                                    <div class="change positive">+201 since last month</div>
+                                    <div class="change positive">+<?php echo $newUsersCount; ?> new this month</div>
                                 </div>
                                 <div class="icon-box">
                                     <i class="fas fa-users"></i>
@@ -579,40 +613,7 @@ include 'includes/header.php';
                     </div>
                 </div>
 
-                <div class="bg-white rounded-4 shadow-sm p-4">
-                    <h3 class="h5 fw-bold mb-3">Recent Bookings</h3>
-                    <p class="text-muted mb-4">You have <?php echo $pendingRequests; ?> pending booking requests.</p>
 
-                    <?php if ($recentBookings): ?>
-                        <?php foreach ($recentBookings as $booking): ?>
-                            <div class="booking-item">
-                                <div class="booking-info">
-                                    <div class="booking-icon">
-                                        <?php
-                                        $iconClass = 'fa-home'; // Default
-                                        // You could add logic here to choose icon based on property type if available in join
-                                        ?>
-                                        <i class="fas <?php echo $iconClass; ?> text-muted"></i>
-                                    </div>
-                                    <div class="booking-details">
-                                        <h4><?php echo htmlspecialchars($booking['property_name']); ?></h4>
-                                        <p>Requested by <?php echo htmlspecialchars($booking['user_name']); ?> •
-                                            <?php echo date('Y-m-d', strtotime($booking['start_date'])); ?>
-                                        </p>
-                                    </div>
-                                </div>
-                                <div class="d-flex align-items-center gap-4">
-                                    <span class="booking-price">$<?php echo number_format($booking['total_cost'], 0); ?>/mo</span>
-                                    <span class="badge-status <?php echo strtolower($booking['status']); ?>">
-                                        <?php echo ucfirst($booking['status']); ?>
-                                    </span>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <p class="text-muted">No recent bookings found.</p>
-                    <?php endif; ?>
-                </div>
 
             <?php elseif ($currentTab === 'properties'): ?>
                 <div class="property-header">
@@ -836,15 +837,10 @@ include 'includes/header.php';
                         <?php endif; ?>
                         <!-- User Fields -->
                         <div class="row g-3">
-                            <div class="col-md-6">
-                                <label for="first_name" class="form-label fw-bold">First Name</label>
-                                <input type="text" name="first_name" id="first_name" class="form-control"
-                                    value="<?php echo htmlspecialchars($editUser['first_name'] ?? ''); ?>" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label for="last_name" class="form-label fw-bold">Last Name</label>
-                                <input type="text" name="last_name" id="last_name" class="form-control"
-                                    value="<?php echo htmlspecialchars($editUser['last_name'] ?? ''); ?>" required>
+                            <div class="col-md-12">
+                                <label for="name" class="form-label fw-bold">Full Name</label>
+                                <input type="text" name="name" id="name" class="form-control"
+                                    value="<?php echo htmlspecialchars($editUser['name'] ?? ''); ?>" required>
                             </div>
                             <div class="col-md-12">
                                 <label for="email" class="form-label fw-bold">Email</label>
@@ -890,8 +886,7 @@ include 'includes/header.php';
                             <thead class="bg-light">
                                 <tr>
                                     <th class="px-4">ID</th>
-                                    <th>First Name</th>
-                                    <th>Last Name</th>
+                                    <th>Name</th>
                                     <th>Email</th>
                                     <th>Role</th>
                                     <th>Status</th>
@@ -903,8 +898,7 @@ include 'includes/header.php';
                                 <?php foreach ($usersList as $u): ?>
                                     <tr class="align-middle">
                                         <td class="px-4">#<?php echo $u['id']; ?></td>
-                                        <td class="fw-bold"><?php echo htmlspecialchars($u['first_name']); ?></td>
-                                        <td class="fw-bold"><?php echo htmlspecialchars($u['last_name']); ?></td>
+                                        <td class="fw-bold"><?php echo htmlspecialchars($u['name']); ?></td>
                                         <td><?php echo htmlspecialchars($u['email']); ?></td>
                                         <td>
                                             <?php if ($u['role'] === 'admin'): ?>
@@ -935,13 +929,6 @@ include 'includes/header.php';
                         </table>
                     </div>
                 </div>
-
-            <?php elseif ($currentTab === 'bookings'): ?>
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h2 class="fw-bold mb-0">Bookings</h2>
-                </div>
-                <!-- TODO: Full bookings management list -->
-                <p>Full bookings management would go here.</p>
 
             <?php elseif ($currentTab === 'settings'): ?>
                 <div class="d-flex justify-content-between align-items-center mb-4">

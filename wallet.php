@@ -80,16 +80,41 @@ if ($row = mysqli_fetch_assoc($result)) {
 }
 mysqli_stmt_close($stmt);
 
-// Fetch total paid (YTD - simplified as lifetime for now or query based on year)
+// Fetch total paid (This Year vs Last Year)
 $totalPaid = 0.0;
-$stmt = mysqli_prepare($conn, "SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = 'rental'");
-mysqli_stmt_bind_param($stmt, "i", $userId);
+$lastYearPaid = 0.0;
+$startOfYear = date('Y-01-01');
+$endOfYear = date('Y-12-31');
+$startOfLastYear = date('Y-01-01', strtotime('-1 year'));
+$endOfLastYear = date('Y-12-31', strtotime('-1 year'));
+
+// Current Year
+$stmt = mysqli_prepare($conn, "SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = 'rental' AND created_at >= ? AND created_at <= ?");
+mysqli_stmt_bind_param($stmt, "iss", $userId, $startOfYear, $endOfYear);
 mysqli_stmt_execute($stmt);
 $res = mysqli_stmt_get_result($stmt);
 if ($r = mysqli_fetch_assoc($res)) {
-    $totalPaid = abs((float) $r['total']); // Rentals are negative
+    $totalPaid = abs((float) $r['total']); // Rentals are usually stored negative or positive depending on implementation, ensuring positive for display
 }
 mysqli_stmt_close($stmt);
+
+// Last Year
+$stmt = mysqli_prepare($conn, "SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = 'rental' AND created_at >= ? AND created_at <= ?");
+mysqli_stmt_bind_param($stmt, "iss", $userId, $startOfLastYear, $endOfLastYear);
+mysqli_stmt_execute($stmt);
+$res = mysqli_stmt_get_result($stmt);
+if ($r = mysqli_fetch_assoc($res)) {
+    $lastYearPaid = abs((float) $r['total']);
+}
+mysqli_stmt_close($stmt);
+
+// Growth Calculation
+$spendingGrowth = 0;
+if ($lastYearPaid > 0) {
+    $spendingGrowth = (($totalPaid - $lastYearPaid) / $lastYearPaid) * 100;
+} elseif ($totalPaid > 0) {
+    $spendingGrowth = 100;
+}
 
 // Fetch last payment
 $lastPayment = 0.0;
@@ -170,7 +195,11 @@ include 'includes/header.php';
                         <div class="bg-white rounded-4 p-4 h-100 shadow-sm">
                             <p class="text-muted mb-1">Total Paid (YTD)</p>
                             <h2 class="h3 fw-bold mb-1">€<?php echo number_format($totalPaid, 2); ?></h2>
-                            <p class="text-success small mb-0 fw-bold">+12% from last year</p>
+                            <p
+                                class="<?php echo $spendingGrowth >= 0 ? 'text-success' : 'text-danger'; ?> small mb-0 fw-bold">
+                                <?php echo ($spendingGrowth >= 0 ? '+' : '') . number_format($spendingGrowth, 1); ?>%
+                                from last year
+                            </p>
                         </div>
                     </div>
                 </div>

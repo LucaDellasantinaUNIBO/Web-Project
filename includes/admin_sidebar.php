@@ -23,10 +23,7 @@ if (!in_array($currentTab, ['overview', 'properties', 'bookings', 'users', 'sett
                 class="list-group-item list-group-item-action <?php echo $currentTab === 'properties' ? 'active' : ''; ?>">
                 <i class="fas fa-home"></i> Properties
             </a>
-            <a href="admin.php?tab=bookings"
-                class="list-group-item list-group-item-action <?php echo $currentTab === 'bookings' ? 'active' : ''; ?>">
-                <i class="fas fa-calendar-alt"></i> Bookings
-            </a>
+
             <a href="admin.php?tab=users"
                 class="list-group-item list-group-item-action <?php echo $currentTab === 'users' ? 'active' : ''; ?>">
                 <i class="fas fa-users"></i> Users

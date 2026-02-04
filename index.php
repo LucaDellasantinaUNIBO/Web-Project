@@ -145,11 +145,11 @@ include 'includes/header.php';
 
                     <div class="flex-grow-1 border-start px-3 py-2 d-none d-md-block">
                         <div class="d-flex align-items-center gap-2 text-muted mb-1">
-                             <i class="fas fa-euro-sign small"></i>
-                             <span class="small fw-bold text-uppercase" style="font-size: 0.7rem;">Max Price</span>
+                            <i class="fas fa-euro-sign small"></i>
+                            <span class="small fw-bold text-uppercase" style="font-size: 0.7rem;">Max Price</span>
                         </div>
-                        <input type="number" name="max_price" class="form-control border-0 p-0 shadow-none fw-medium" 
-                            placeholder="e.g. 1500" value="<?php echo htmlspecialchars((string)$maxPrice); ?>">
+                        <input type="number" name="max_price" class="form-control border-0 p-0 shadow-none fw-medium"
+                            placeholder="e.g. 1500" value="<?php echo htmlspecialchars((string) $maxPrice); ?>">
                     </div>
 
                     <button
@@ -272,9 +272,11 @@ include 'includes/header.php';
                                         </div>
                                     </div>
 
-                                    <!-- Action Button -->
                                     <?php if ($isAdmin): ?>
-                                        <button class="btn btn-outline-secondary w-100 rounded-pill" disabled>Admin View</button>
+                                        <a href="admin.php?tab=properties&edit=<?php echo $row['id']; ?>#property-form"
+                                            class="btn btn-outline-primary w-100 rounded-pill fw-bold">
+                                            <i class="fas fa-edit me-1"></i> Modify Property
+                                        </a>
                                     <?php elseif ($isAvailable): ?>
                                         <a href="booking.php?property_id=<?php echo $row['id']; ?>"
                                             class="btn btn-primary w-100 rounded-pill py-2 fw-bold shadow-sm icon-link-hover">

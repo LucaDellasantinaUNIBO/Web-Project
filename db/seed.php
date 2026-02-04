@@ -281,7 +281,7 @@ if ($shouldRun && $schemaReady) {
         [
             'name' => 'Antico Casale in Mattoni',
             'type' => 'Casale',
-            'status' => 'rented',
+            'status' => 'available',
             'location' => 'Napoli, Vomero',
             'rooms' => 6,
             'monthly_price' => 2500.00,
@@ -293,7 +293,7 @@ if ($shouldRun && $schemaReady) {
         [
             'name' => 'Villa Familiare',
             'type' => 'Villa',
-            'status' => 'maintenance',
+            'status' => 'available',
             'location' => 'Firenze, Fiesole',
             'rooms' => 5,
             'monthly_price' => 2800.00,

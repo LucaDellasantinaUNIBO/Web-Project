@@ -507,7 +507,7 @@ include 'includes/header.php';
                         <?php endif; ?>
 
 
-                        <form method="post" onsubmit="return confirm('Delete your account permanently?');">
+                        <form method="post">
                             <input type="hidden" name="action" value="delete_account">
                             <div class="mb-3">
                                 <label class="form-label fw-bold" for="delete-password">Confirm password</label>
