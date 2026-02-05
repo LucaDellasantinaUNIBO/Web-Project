@@ -1,5 +1,5 @@
-<?php
-/** @var mysqli $conn */
+﻿<?php
+
 include 'db/db_config.php';
 include 'includes/auth.php';
 
@@ -10,16 +10,20 @@ $pendingRentals = [];
 $activeRentals = [];
 $now = date('Y-m-d');
 
-// Fetch all rentals with property details
-$stmt = mysqli_prepare($conn, "SELECT r.id, r.start_date, r.end_date, r.months, r.total_cost, r.status, p.name AS property_name, p.location, p.image_url, p.type AS property_type FROM rentals r JOIN properties p ON r.property_id = p.id WHERE r.user_id = ? ORDER BY r.start_date DESC");
+$stmt = mysqli_prepare($conn, "SELECT r.id, r.start_date, r.end_date, r.months, r.total_cost, r.status, p.name AS property_name, p.location, p.image_url, p.type AS property_type, p.status AS property_status FROM rentals r JOIN properties p ON r.property_id = p.id WHERE r.user_id = ? ORDER BY r.start_date DESC");
 if ($stmt) {
     mysqli_stmt_bind_param($stmt, "i", $userId);
     mysqli_stmt_execute($stmt);
     $result = mysqli_stmt_get_result($stmt);
     if ($result) {
         while ($row = mysqli_fetch_assoc($result)) {
-            // Determine status
-            $status = ucfirst($row['status']); // 'Pending', 'Approved', 'Rejected'
+
+            // If admin removed 'rented' status from property, hide the rental from user
+            if ($row['status'] === 'approved' && $row['property_status'] !== 'rented') {
+                continue;
+            }
+
+            $status = ucfirst($row['status']);
 
             $statusClass = 'bg-secondary text-white';
             if ($row['status'] === 'approved') {
@@ -43,7 +47,7 @@ if ($stmt) {
             if ($row['status'] === 'pending') {
                 $pendingRentals[] = $row;
             } else {
-                $activeRentals[] = $row; // Includes active, completed, rejected
+                $activeRentals[] = $row;
             }
         }
     }
@@ -114,9 +118,9 @@ include 'includes/header.php';
                     <input type="hidden" name="rental_id" id="chat-rental-id">
                     <div class="input-group">
                         <input type="text" name="message" class="form-control border-0 bg-light rounded-start-pill ps-3"
-                            placeholder="Type a message..." required>
+                            placeholder="Type a message..." aria-label="Message" title="Message" required>
                         <button class="btn btn-primary rounded-end-pill px-4" type="submit">
-                            <i class="fas fa-paper-plane"></i>
+                            <span class="fas fa-paper-plane" aria-hidden="true"></span>
                         </button>
                     </div>
                 </form>
@@ -140,7 +144,7 @@ include 'includes/header.php';
         const rentalId = document.getElementById('chat-rental-id').value;
         const msg = this.message.value;
 
-        // Simple fetch to send message
+
         fetch('api/send_message.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

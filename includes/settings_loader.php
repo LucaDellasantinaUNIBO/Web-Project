@@ -1,16 +1,14 @@
-<?php
-// includes/settings_loader.php
+﻿<?php
+
 if (!isset($conn)) {
-    return; // Safety if db not connected
+    return;
 }
 
-// Load settings into a global array
 $siteSettings = [];
 
-// Check if table exists first to avoid fatal errors
 $tableCheck = mysqli_query($conn, "SHOW TABLES LIKE 'site_settings'");
 if (mysqli_num_rows($tableCheck) == 0) {
-    // Table doesn't exist, create it and seed defaults
+
     $sql = "CREATE TABLE IF NOT EXISTS site_settings (
         setting_key VARCHAR(50) PRIMARY KEY,
         setting_value TEXT
@@ -36,7 +34,5 @@ if ($res) {
     }
 }
 
-// Set defaults if missing
 $SITE_NAME = $siteSettings['site_name'] ?? 'Housing Rentals';
 $SITE_DESC = $siteSettings['site_description'] ?? 'Housing Rentals Platform';
-?>

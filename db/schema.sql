@@ -67,22 +67,6 @@ CREATE TABLE transactions (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE TABLE issues (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    property_id INT NOT NULL,
-    rental_id INT NOT NULL,
-    description TEXT NOT NULL,
-    status ENUM('open', 'closed') NOT NULL DEFAULT 'open',
-    admin_notes TEXT DEFAULT NULL,
-    reviewed_by INT DEFAULT NULL,
-    reviewed_at TIMESTAMP NULL DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
-    FOREIGN KEY (rental_id) REFERENCES rentals(id) ON DELETE CASCADE,
-    FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
-);
 
 CREATE TABLE change_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -97,11 +81,13 @@ CREATE TABLE change_log (
 
 CREATE TABLE messages (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    rental_id INT NOT NULL,
+    rental_id INT DEFAULT NULL,
     sender_id INT NOT NULL,
+    receiver_id INT NOT NULL,
     message TEXT NOT NULL,
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (rental_id) REFERENCES rentals(id) ON DELETE CASCADE,
-    FOREIGN KEY (sender_id) REFERENCES users(id)
+    FOREIGN KEY (sender_id) REFERENCES users(id),
+    FOREIGN KEY (receiver_id) REFERENCES users(id)
 );

@@ -1,35 +1,33 @@
-<?php
+﻿<?php
+
+include_once __DIR__ . '/functions.php';
+
 if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+    sec_session_start();
 }
 
-function is_admin(): bool
+function require_login()
 {
-    if (!isset($_SESSION['user_role'])) {
-        return false;
-    }
-    return strtolower((string) $_SESSION['user_role']) === 'admin';
-}
-
-function require_login(): void
-{
-    if (!isset($_SESSION['user_id'])) {
-        $redirect = urlencode($_SERVER['REQUEST_URI']);
-        header("Location: login.php?redirect={$redirect}");
+    global $mysqli;
+    if (!login_check($mysqli)) {
+        header('Location: login.php?redirect=' . urlencode($_SERVER['REQUEST_URI']));
         exit;
     }
 }
 
-function require_admin(): void
+function is_admin()
 {
-    if (!isset($_SESSION['user_id'])) {
-        $redirect = urlencode($_SERVER['REQUEST_URI']);
-        header("Location: login.php?redirect={$redirect}");
-        exit;
+    global $mysqli;
+    if (login_check($mysqli) && isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
+        return true;
     }
+    return false;
+}
+
+function require_admin()
+{
     if (!is_admin()) {
-        header("Location: index.php?error=forbidden");
+        header('Location: login.php');
         exit;
     }
 }
-?>

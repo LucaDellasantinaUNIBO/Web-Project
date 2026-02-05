@@ -1,7 +1,7 @@
-<div class="bg-white rounded-4 shadow-sm p-0 overflow-hidden">
+﻿<div class="bg-white rounded-4 shadow-sm p-0 overflow-hidden">
     <div class="row g-0">
         <div class="col-md-4">
-            <div style="height: 100%; min-height: 200px; background-color: #f0f0f0;">
+            <div style="height: 100%; min-height: 200px; background-color: 
                 <?php if ($rental['image_url']): ?>
                     <img src="<?php echo htmlspecialchars($rental['image_url']); ?>"
                         alt="<?php echo htmlspecialchars($rental['property_name']); ?>"
@@ -48,7 +48,7 @@
 
                 <div class="mt-auto pt-3 d-flex gap-2">
                     <button class="btn btn-outline-primary btn-sm px-3" data-bs-toggle="modal"
-                        data-bs-target="#chatModal" data-rental-id="<?php echo $rental['id']; ?>">
+                        data-bs-target="
                         <i class="fas fa-comment-alt me-1"></i> Chat
                     </button>
                     <!-- Add Pay Rent or Details buttons here if needed -->

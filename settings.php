@@ -1,5 +1,5 @@
-<?php
-/** @var mysqli $conn */
+﻿<?php
+
 include 'db/db_config.php';
 include 'includes/auth.php';
 
@@ -14,8 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $newPass = $_POST['new_password'] ?? '';
     $confirmPass = $_POST['confirm_password'] ?? '';
 
-    // Fetch current password
-    $stmt = mysqli_prepare($conn, "SELECT password FROM users WHERE id = ?");
+    // Recupera la password hashata e il salt attuali dal DB
+    $stmt = mysqli_prepare($conn, "SELECT password, salt FROM users WHERE id = ?");
     mysqli_stmt_bind_param($stmt, "i", $userId);
     mysqli_stmt_execute($stmt);
     $result = mysqli_stmt_get_result($stmt);
@@ -24,23 +24,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     if (!$user) {
         $errors[] = "User not found.";
-    } elseif (!password_verify($currentPass, $user['password'])) {
-        $errors[] = "Current password is incorrect.";
-    } elseif ($newPass !== $confirmPass) {
-        $errors[] = "New passwords do not match.";
-    } elseif (strlen($newPass) < 6) {
-        $errors[] = "Password must be at least 6 characters.";
     } else {
-        // Update password with hash
-        $newPasswordHash = password_hash($newPass, PASSWORD_DEFAULT);
-        $stmt = mysqli_prepare($conn, "UPDATE users SET password = ? WHERE id = ?");
-        mysqli_stmt_bind_param($stmt, "si", $newPasswordHash, $userId);
-        if (mysqli_stmt_execute($stmt)) {
-            $success = "Password updated successfully.";
+        // Verifica la password corrente
+        // Step 1: Hash della password in chiaro (come farebbe il client js)
+        $currentPassHash = hash('sha512', $currentPass);
+
+        // Step 2: Hash con il salt (come fa il server in login)
+        $checkPassword = hash('sha512', $currentPassHash . $user['salt']);
+
+        if ($checkPassword !== $user['password']) {
+            $errors[] = "Current password is incorrect.";
+        } elseif ($newPass !== $confirmPass) {
+            $errors[] = "New passwords do not match.";
+        } elseif (strlen($newPass) < 6) {
+            $errors[] = "Password must be at least 6 characters.";
         } else {
-            $errors[] = "Failed to update password.";
+            // Genera nuovo salt e hash della nuova password
+            $newSalt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
+            $newPassHashClient = hash('sha512', $newPass);
+            $newPassHashServer = hash('sha512', $newPassHashClient . $newSalt);
+
+            $stmt = mysqli_prepare($conn, "UPDATE users SET password = ?, salt = ? WHERE id = ?");
+            mysqli_stmt_bind_param($stmt, "ssi", $newPassHashServer, $newSalt, $userId);
+            if (mysqli_stmt_execute($stmt)) {
+                $success = "Password updated successfully.";
+            } else {
+                $errors[] = "Failed to update password.";
+            }
+            mysqli_stmt_close($stmt);
         }
-        mysqli_stmt_close($stmt);
     }
 }
 
@@ -70,9 +82,6 @@ include 'includes/header.php';
                                 echo htmlspecialchars($e) . "<br>"; ?>
                         </div>
                     <?php endif; ?>
-
-
-
 
                     <!-- Password Change -->
                     <div class="py-4">

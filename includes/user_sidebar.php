@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 $currentPage = basename($_SERVER['PHP_SELF']);
 ?>
 <div class="col-lg-3 mb-4 mb-lg-0">
@@ -15,7 +15,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                 <?php echo htmlspecialchars($_SESSION['user_name'] ?? 'User'); ?>
             </h2>
             <p class="text-muted small mb-0">Member since
-                <?php echo date('F Y'); // In a real app, use created_at ?>
+                <?php echo date('F Y'); ?>
             </p>
         </div>
 

@@ -1,5 +1,5 @@
-<?php
-/** @var mysqli $conn */
+﻿<?php
+ob_start();
 include 'db/db_config.php';
 include 'includes/auth.php';
 
@@ -82,7 +82,7 @@ if (!empty($maxPrice)) {
         $query .= " WHERE monthly_price <= ?";
     }
     $params[] = $maxPrice;
-    $types .= 'd'; // Decimal/Double (or integer)
+    $types .= 'd';
 }
 
 $query .= " ORDER BY id DESC";
@@ -102,23 +102,17 @@ include 'includes/header.php';
 ?>
 
 <main>
-
-    <!-- Hero Section -->
     <section class="position-relative w-100 d-flex align-items-center justify-content-center"
         style="height: 600px; background: url('https://images.unsplash.com/photo-1564013799919-ab600027ffc6?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80') center/cover no-repeat;">
         <div class="position-absolute top-0 start-0 w-100 h-100"
             style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.6) 100%);"></div>
 
         <div class="container position-relative z-2 text-center text-white">
-            <h1 class="display-3 fw-bold mb-3">Find Your Perfect <span class="text-success">Home</span></h1>
+            <h1 class="display-3 fw-bold mb-3">Find Your Perfect Home</h1>
             <p class="fs-4 fw-light mb-5 opacity-75">Discover luxury apartments, cozy homes, and modern villas for rent
                 in your favorite locations.</p>
-
-            <!-- Removed unnecessary i tag or replaced if it was semantic, seemingly just decorative or empty here based on error log -->
-            <!-- Error log mentioned line 113: <i class="fas fa-expand-alt me-2"></i>. It seems I might have missed context. Let's look closer at the file content in next step if this fails or seems wrong. -->
             <div class="bg-white p-2 rounded-4 shadow-lg mx-auto d-flex align-items-center gap-2"
                 style="max-width: 800px; padding-right: 8px !important;">
-
                 <form class="w-100 d-flex align-items-center gap-2 m-0" method="get" id="filters">
                     <div class="flex-grow-1 border-end px-3 py-2 d-none d-md-block">
                         <div class="d-flex align-items-center gap-2 text-muted mb-1">
@@ -168,7 +162,6 @@ include 'includes/header.php';
         </div>
     </section>
 
-    <!-- Map Section -->
     <section class="py-5 bg-white border-bottom">
         <div class="container">
             <div class="d-flex align-items-center justify-content-between mb-4">
@@ -188,7 +181,6 @@ include 'includes/header.php';
         </div>
     </section>
 
-    <!-- Properties Section -->
     <section class="py-5 bg-light" id="properties-section">
         <div class="container">
             <div class="text-center mb-5">
@@ -198,14 +190,14 @@ include 'includes/header.php';
 
             <div class="row row-cols-1 row-cols-md-3 g-4">
                 <?php
-                $mapProperties = []; // Array to hold data for JS map
+                $mapProperties = [];
                 if ($result && mysqli_num_rows($result) > 0) {
                     while ($row = mysqli_fetch_assoc($result)) {
                         $sqm = isset($row['sqm']) ? (int) $row['sqm'] : 60;
-                        // $rooms = (int) $row['rooms'];
+
                         $beds = (int) ($row['beds'] ?? 1);
                         $baths = (int) ($row['baths'] ?? 1);
-                        // Collect data for map
+
                         if (!empty($row['lat']) && !empty($row['lng'])) {
                             $mapProperties[] = [
                                 'name' => $row['name'],
@@ -221,7 +213,7 @@ include 'includes/header.php';
                         $isAvailable = strtolower(trim($row['status'])) === 'available';
                         $imageUrl = trim((string) ($row['image_url'] ?? ''));
 
-                        // Badge logic
+
                         $badgeColor = 'bg-primary';
                         if ($statusLabel == 'Rented')
                             $badgeColor = 'bg-warning text-dark';
@@ -230,7 +222,6 @@ include 'includes/header.php';
                         ?>
                         <div class="col">
                             <div class="card h-100 overflow-hidden border-0 shadow-sm hover-lift">
-                                <!-- Image Wrapper -->
                                 <div class="position-relative">
                                     <?php if ($imageUrl): ?>
                                         <img src="<?php echo htmlspecialchars($imageUrl); ?>" class="card-img-top"
@@ -243,13 +234,11 @@ include 'includes/header.php';
                                         </div>
                                     <?php endif; ?>
 
-                                    <!-- Price Pill -->
                                     <div
                                         class="position-absolute top-0 start-0 m-3 bg-white text-dark rounded-pill px-3 py-1 fw-bold shadow-sm small">
                                         €<?php echo htmlspecialchars((string) $row['monthly_price']); ?>/mo
                                     </div>
 
-                                    <!-- Status Badge -->
                                     <div
                                         class="position-absolute top-0 end-0 m-3 badge <?php echo $badgeColor; ?> rounded-pill px-3 shadow-sm">
                                         <?php echo htmlspecialchars($statusLabel); ?>
@@ -265,7 +254,6 @@ include 'includes/header.php';
                                         <?php echo htmlspecialchars($row['location']); ?>
                                     </div>
 
-                                    <!-- Specs Row -->
                                     <div class="d-flex align-items-center justify-content-between my-4 px-1">
                                         <div class="d-flex align-items-center gap-2 text-muted">
                                             <span class="fas fa-bed" aria-hidden="true"></span>
@@ -282,7 +270,7 @@ include 'includes/header.php';
                                     </div>
 
                                     <?php if ($isAdmin): ?>
-                                        <a href="admin.php?tab=properties&edit=<?php echo $row['id']; ?>#property-form"
+                                        <a href="admin.php?tab=properties&edit=<?php echo $row['id']; ?>"
                                             class="btn btn-outline-primary w-100 rounded-pill fw-bold">
                                             <span class="fas fa-edit me-1" aria-hidden="true"></span> Modify Property
                                         </a>
@@ -310,14 +298,13 @@ include 'includes/header.php';
     </section>
 </main>
 
-
 <script>
-    // Map Implementation
+
     var map;
     var isExpanded = false;
 
     function initMap() {
-        // Initialize map centered on Italy
+
         map = L.map('map').setView([41.8719, 12.5674], 6);
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -342,15 +329,15 @@ include 'includes/header.php';
 
             marker.bindPopup(popupContent);
 
-            // Show popup on hover
+
             marker.on('mouseover', function (e) {
                 this.openPopup();
             });
             marker.on('mouseout', function (e) {
-                // this.closePopup(); // Optional: keep open or close
+
             });
             marker.on('click', function (e) {
-                // Scroll to card? or go to booking?
+
             });
         });
     }
@@ -371,10 +358,10 @@ include 'includes/header.php';
 
         setTimeout(function () {
             map.invalidateSize();
-        }, 505); // Wait for transition
+        }, 505);
     }
 
-    // Load map when DOM is ready
+
     document.addEventListener('DOMContentLoaded', initMap);
 
 </script>

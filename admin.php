@@ -1,9 +1,9 @@
-<?php
+﻿<?php
+ob_start();
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-/** @var mysqli $conn */
 include 'db/db_config.php';
 include 'includes/auth.php';
 
@@ -75,7 +75,12 @@ function log_change(mysqli $conn, int $adminId, string $action, string $entity, 
         return;
     }
     mysqli_stmt_bind_param($stmt, "issis", $adminId, $action, $entity, $entityId, $details);
-    mysqli_stmt_execute($stmt);
+    try {
+        mysqli_stmt_execute($stmt);
+    } catch (mysqli_sql_exception $e) {
+
+        error_log("Failed to log change: " . $e->getMessage());
+    }
     mysqli_stmt_close($stmt);
 }
 
@@ -95,17 +100,6 @@ if (isset($_GET['delete'])) {
 
     $deleteOk = true;
     $errorText = '';
-
-    $stmt = mysqli_prepare($conn, "DELETE FROM issues WHERE property_id = ?");
-    if ($stmt) {
-        mysqli_stmt_bind_param($stmt, "i", $id);
-        $deleteOk = mysqli_stmt_execute($stmt);
-        $errorText = mysqli_stmt_error($stmt);
-        mysqli_stmt_close($stmt);
-    } else {
-        $deleteOk = false;
-        $errorText = mysqli_error($conn);
-    }
 
     if ($deleteOk) {
         $stmt = mysqli_prepare($conn, "DELETE FROM rentals WHERE property_id = ?");
@@ -135,7 +129,7 @@ if (isset($_GET['delete'])) {
 
     if ($deleteOk) {
         mysqli_commit($conn);
-        $details = $propertyName ? "Deleted property {$propertyName}." : "Deleted property #{$id}.";
+        $details = $propertyName ? "Deleted property {$propertyName}." : "Deleted property ID {$id}.";
         log_change($conn, $_SESSION['user_id'], 'delete', 'property', $id, $details);
         $_SESSION['flash'] = ['type' => 'success', 'message' => 'Property deleted.'];
     } else {
@@ -161,10 +155,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $deleteOk = true;
         $errorText = '';
 
-        if (!mysqli_query($conn, "DELETE FROM issues")) {
-            $deleteOk = false;
-            $errorText = mysqli_error($conn);
-        }
         if ($deleteOk && !mysqli_query($conn, "DELETE FROM rentals")) {
             $deleteOk = false;
             $errorText = mysqli_error($conn);
@@ -193,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $type = $_POST['type'] ?? '';
         $status = $_POST['status'] ?? '';
         $location = trim($_POST['location'] ?? '');
-        // $rooms = (int) ($_POST['rooms'] ?? 1); // Deprecated
+        $location = trim($_POST['location'] ?? '');
         $sqm = (int) ($_POST['sqm'] ?? 50);
         $beds = (int) ($_POST['beds'] ?? 1);
         $baths = (int) ($_POST['baths'] ?? 1);
@@ -256,7 +246,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-
 $editProperty = null;
 if (isset($_GET['edit'])) {
     $editId = (int) $_GET['edit'];
@@ -276,7 +265,6 @@ $formData = [
     'status' => $editProperty['status'] ?? 'available',
     'location' => $editProperty['location'] ?? '',
     'sqm' => $editProperty['sqm'] ?? 50,
-    // 'rooms' => $editProperty['rooms'] ?? 1,
     'beds' => $editProperty['beds'] ?? 1,
     'baths' => $editProperty['baths'] ?? 1,
     'monthly_price' => $editProperty['monthly_price'] ?? 500.00,
@@ -291,7 +279,6 @@ if (!in_array($currentTab, $allowedTabs, true)) {
     $currentTab = 'properties';
 }
 
-// User Actions
 if (isset($_GET['delete_user'])) {
     $id = (int) $_GET['delete_user'];
     if ($id === $_SESSION['user_id']) {
@@ -300,7 +287,7 @@ if (isset($_GET['delete_user'])) {
         mysqli_begin_transaction($conn);
         $deleteOk = true;
 
-        $tables = ['issues', 'rentals', 'transactions', 'change_log'];
+        $tables = ['rentals', 'transactions', 'change_log'];
         foreach ($tables as $table) {
             $col = (($table === 'change_log') ? 'admin_id' : 'user_id');
             if ($deleteOk && !mysqli_query($conn, "DELETE FROM $table WHERE $col = $id")) {
@@ -314,16 +301,14 @@ if (isset($_GET['delete_user'])) {
 
         if ($deleteOk) {
             mysqli_commit($conn);
-            log_change($conn, $_SESSION['user_id'], 'delete', 'user', $id, "Deleted user #{$id}.");
+            log_change($conn, $_SESSION['user_id'], 'delete', 'user', $id, "Deleted user ID {$id}.");
             $_SESSION['flash'] = ['type' => 'success', 'message' => 'User deleted.'];
         } else {
             mysqli_rollback($conn);
             $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Delete failed.'];
         }
     }
-    // Redirect removed
 }
-
 
 if ($action === 'status_toggle') {
     $id = (int) ($_POST['id'] ?? 0);
@@ -341,61 +326,55 @@ if ($action === 'status_toggle') {
         }
         mysqli_stmt_close($stmt);
     }
-    // Redirect removed
 }
 
 if ($action === 'approve_rental') {
     $rentalId = (int) ($_POST['rental_id'] ?? 0);
-    // Fetch rental details
+
     $rentQ = mysqli_query($conn, "SELECT property_id, total_cost FROM rentals WHERE id = $rentalId AND status = 'pending'");
     $rentalData = mysqli_fetch_assoc($rentQ);
 
     if ($rentalData) {
         $propId = $rentalData['property_id'];
         mysqli_begin_transaction($conn);
-        // 1. Update Rental Status
+
         $updRental = mysqli_query($conn, "UPDATE rentals SET status = 'approved' WHERE id = $rentalId");
 
-        // 2. Update Property Status
         $updProp = mysqli_query($conn, "UPDATE properties SET status = 'rented' WHERE id = $propId");
 
         if ($updRental && $updProp) {
-            // 3. Auto-reject other pending requests for the same property
+
             $conflictQ = mysqli_query($conn, "SELECT id, user_id, total_cost FROM rentals WHERE property_id = $propId AND status = 'pending' AND id != $rentalId");
             while ($conflict = mysqli_fetch_assoc($conflictQ)) {
                 $cId = $conflict['id'];
                 $cUser = $conflict['user_id'];
                 $cCost = $conflict['total_cost'];
 
-                // Reject
                 mysqli_query($conn, "UPDATE rentals SET status = 'rejected' WHERE id = $cId");
 
-                // Refund
                 mysqli_query($conn, "UPDATE users SET credit = credit + $cCost WHERE id = $cUser");
 
-                // Log Transaction
                 $balQ = mysqli_query($conn, "SELECT credit FROM users WHERE id = $cUser");
                 $newBal = mysqli_fetch_assoc($balQ)['credit'];
-                $desc = "Refund for rejected rental #$cId (Property rented to another user)";
+                $desc = "Refund for rejected rental ID {$cId}.";
                 mysqli_query($conn, "INSERT INTO transactions (user_id, type, amount, balance_after, description) VALUES ($cUser, 'topup', $cCost, $newBal, '$desc')");
 
-                log_change($conn, $_SESSION['user_id'], 'reject', 'rental', $cId, "Auto-rejected rental #$cId.");
+                log_change($conn, $_SESSION['user_id'], 'reject', 'rental', $cId, "Auto-rejected rental ID {$cId}.");
             }
 
             mysqli_commit($conn);
-            log_change($conn, $_SESSION['user_id'], 'approve', 'rental', $rentalId, "Approved rental #$rentalId.");
+            log_change($conn, $_SESSION['user_id'], 'approve', 'rental', $rentalId, "Approved rental ID {$rentalId}.");
             $_SESSION['flash'] = ['type' => 'success', 'message' => 'Rental approved and conflicting requests rejected.'];
         } else {
             mysqli_rollback($conn);
             $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Error approving rental.'];
         }
     }
-    // Redirect removed
 }
 
 if ($action === 'reject_rental') {
     $rentalId = (int) ($_POST['rental_id'] ?? 0);
-    // Fetch rental details including user for refund
+
     $rentQ = mysqli_query($conn, "SELECT user_id, total_cost, property_id FROM rentals WHERE id = $rentalId AND status = 'pending'");
     $rentalData = mysqli_fetch_assoc($rentQ);
 
@@ -405,30 +384,25 @@ if ($action === 'reject_rental') {
 
         mysqli_begin_transaction($conn);
 
-        // 1. Update Rental Status
         $updRental = mysqli_query($conn, "UPDATE rentals SET status = 'rejected' WHERE id = $rentalId");
 
-        // 2. Refund User
         $updUser = mysqli_query($conn, "UPDATE users SET credit = credit + $refundAmount WHERE id = $userId");
 
-        // 3. Log Transaction
-        // Fetch new balance
         $balQ = mysqli_query($conn, "SELECT credit FROM users WHERE id = $userId");
         $newBal = mysqli_fetch_assoc($balQ)['credit'];
 
-        $desc = "Refund for rejected rental #$rentalId";
+        $desc = "Refund for rejected rental ID {$rentalId}.";
         $insTrans = mysqli_query($conn, "INSERT INTO transactions (user_id, type, amount, balance_after, description) VALUES ($userId, 'topup', $refundAmount, $newBal, '$desc')");
 
         if ($updRental && $updUser && $insTrans) {
             mysqli_commit($conn);
-            log_change($conn, $_SESSION['user_id'], 'reject', 'rental', $rentalId, "Rejected rental #$rentalId.");
+            log_change($conn, $_SESSION['user_id'], 'reject', 'rental', $rentalId, "Rejected rental ID {$rentalId}.");
             $_SESSION['flash'] = ['type' => 'success', 'message' => 'Rental rejected and user refunded.'];
         } else {
             mysqli_rollback($conn);
             $_SESSION['flash'] = ['type' => 'danger', 'message' => 'Error rejecting rental.'];
         }
     }
-    // Redirect removed
 }
 
 if (strpos($action, 'user_') === 0) {
@@ -450,10 +424,12 @@ if (strpos($action, 'user_') === 0) {
                 mysqli_stmt_close($stmt);
             } else {
                 mysqli_stmt_close($stmt);
-                $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+                $salt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
+                $p_client = hash('sha512', $password);
+                $passwordHash = hash('sha512', $p_client . $salt);
 
-                $stmt = mysqli_prepare($conn, "INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)");
-                mysqli_stmt_bind_param($stmt, "sssss", $name, $email, $passwordHash, $role, $status);
+                $stmt = mysqli_prepare($conn, "INSERT INTO users (name, email, password, salt, role, status) VALUES (?, ?, ?, ?, ?, ?)");
+                mysqli_stmt_bind_param($stmt, "ssssss", $name, $email, $passwordHash, $salt, $role, $status);
                 if (mysqli_stmt_execute($stmt)) {
                     log_change($conn, $_SESSION['user_id'], 'create', 'user', mysqli_insert_id($conn), "Created user {$name}.");
                     $_SESSION['flash'] = ['type' => 'success', 'message' => 'User created successfully!'];
@@ -476,9 +452,12 @@ if (strpos($action, 'user_') === 0) {
             $errors[] = 'Invalid user ID.';
         } else {
             if (!empty($password)) {
-                $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = mysqli_prepare($conn, "UPDATE users SET name=?, email=?, password=?, role=?, status=? WHERE id=?");
-                mysqli_stmt_bind_param($stmt, "sssssi", $name, $email, $passwordHash, $role, $status, $editUserId);
+                $salt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
+                $p_client = hash('sha512', $password);
+                $passwordHash = hash('sha512', $p_client . $salt);
+
+                $stmt = mysqli_prepare($conn, "UPDATE users SET name=?, email=?, password=?, salt=?, role=?, status=? WHERE id=?");
+                mysqli_stmt_bind_param($stmt, "ssssssi", $name, $email, $passwordHash, $salt, $role, $status, $editUserId);
             } else {
                 $stmt = mysqli_prepare($conn, "UPDATE users SET name=?, email=?, role=?, status=? WHERE id=?");
                 mysqli_stmt_bind_param($stmt, "ssssi", $name, $email, $role, $status, $editUserId);
@@ -494,10 +473,8 @@ if (strpos($action, 'user_') === 0) {
             }
         }
     }
-
 }
 
-// Handle Settings Update
 if ($action === 'update_settings') {
     $siteName = trim($_POST['site_name'] ?? '');
     $siteDesc = trim($_POST['site_description'] ?? '');
@@ -506,23 +483,20 @@ if ($action === 'update_settings') {
     $confirmPass = $_POST['confirm_password'] ?? '';
     $currentPass = $_POST['current_password'] ?? '';
 
-    // Update Site Settings
     $settingsToUpdate = [
         'site_name' => $siteName,
         'site_description' => $siteDesc
     ];
 
     foreach ($settingsToUpdate as $key => $val) {
-        // Upsert logic (Insert on Duplicate Key Update)
         $stmt = mysqli_prepare($conn, "INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
         mysqli_stmt_bind_param($stmt, "sss", $key, $val, $val);
         mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
     }
 
-    // Update Admin Email
     if (!empty($adminEmail)) {
-        // Check if email belongs to another user
+
         $stmt = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ? AND id != ?");
         mysqli_stmt_bind_param($stmt, "si", $adminEmail, $_SESSION['user_id']);
         mysqli_stmt_execute($stmt);
@@ -534,29 +508,33 @@ if ($action === 'update_settings') {
             $stmt = mysqli_prepare($conn, "UPDATE users SET email = ? WHERE id = ?");
             mysqli_stmt_bind_param($stmt, "si", $adminEmail, $_SESSION['user_id']);
             mysqli_stmt_execute($stmt);
-            $_SESSION['user_email'] = $adminEmail; // Update session
+            $_SESSION['user_email'] = $adminEmail;
             mysqli_stmt_close($stmt);
         }
     }
 
-    // Update Password logic (existing logic placeholder was removed in previous steps or needs to be merged)
     if (!empty($newPass)) {
-        // Verify current password first
-        $stmt = mysqli_prepare($conn, "SELECT password FROM users WHERE id = ?");
+        $stmt = mysqli_prepare($conn, "SELECT password, salt FROM users WHERE id = ?");
         mysqli_stmt_bind_param($stmt, "i", $_SESSION['user_id']);
         mysqli_stmt_execute($stmt);
         $res = mysqli_stmt_get_result($stmt);
         $me = mysqli_fetch_assoc($res);
         mysqli_stmt_close($stmt);
 
-        if (!$me || !password_verify($currentPass, $me['password'])) {
+        $currentPassHash = hash('sha512', $currentPass);
+        $checkPassword = hash('sha512', $currentPassHash . $me['salt']);
+
+        if (!$me || $checkPassword !== $me['password']) {
             $errors[] = "Current password is incorrect.";
         } elseif ($newPass !== $confirmPass) {
             $errors[] = "New passwords do not match.";
         } else {
-            $newHash = password_hash($newPass, PASSWORD_DEFAULT);
-            $stmt = mysqli_prepare($conn, "UPDATE users SET password = ? WHERE id = ?");
-            mysqli_stmt_bind_param($stmt, "si", $newHash, $_SESSION['user_id']);
+            $newSalt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
+            $newPassHashClient = hash('sha512', $newPass);
+            $newPassHashServer = hash('sha512', $newPassHashClient . $newSalt);
+
+            $stmt = mysqli_prepare($conn, "UPDATE users SET password = ?, salt = ? WHERE id = ?");
+            mysqli_stmt_bind_param($stmt, "ssi", $newPassHashServer, $newSalt, $_SESSION['user_id']);
             mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
         }
@@ -564,11 +542,11 @@ if ($action === 'update_settings') {
 
     if (empty($errors)) {
         $_SESSION['flash'] = ['type' => 'success', 'message' => 'Settings updated successfully!'];
-        // Reload to reflect changes
         header('Location: admin.php?tab=settings');
         exit;
     }
 }
+$properties = [];
 if ($currentTab === 'properties') {
     $listQuery = "SELECT * FROM properties";
     $listParams = [];
@@ -598,7 +576,6 @@ $editUser = null;
 if ($currentTab === 'users') {
     if (isset($_GET['delete_user'])) {
         $delId = (int) $_GET['delete_user'];
-        // Prevent self-deletion
         if ($delId === $_SESSION['user_id']) {
             $_SESSION['flash'] = ['type' => 'danger', 'message' => 'You cannot delete yourself.'];
         } else {
@@ -608,8 +585,6 @@ if ($currentTab === 'users') {
             $res = mysqli_stmt_get_result($stmt);
         }
     }
-
-
 }
 
 if (isset($_GET['edit_user'])) {
@@ -622,8 +597,7 @@ if (isset($_GET['edit_user'])) {
     if ($editUser)
         $editUser['id'] = $editUserId;
 }
-// Fetch users with new columns
-// Fetch users (Schema has 'name', not first/last)
+
 $res = mysqli_query($conn, "SELECT id, name, email, role, status, created_at FROM users ORDER BY id DESC");
 while ($row = mysqli_fetch_assoc($res)) {
     $usersList[] = $row;
@@ -631,7 +605,6 @@ while ($row = mysqli_fetch_assoc($res)) {
 
 $messageUsers = [];
 if ($currentTab === 'messages') {
-    // Fetch users who have messages with the CURRENT admin
     $myId = $_SESSION['user_id'];
     $msgQ = "SELECT DISTINCT u.id, u.name, u.email, u.role,
              (SELECT message FROM messages m2 
@@ -657,30 +630,17 @@ if ($currentTab === 'messages') {
     }
 }
 
-
-
-
-// ... (User Actions logic remains above, stopping at $usersList calculation)
-
-// Dashboard Stats Calculation
 $totalRevenue = 0;
 $activeRentals = 0;
 $pendingRequests = 0;
 $activeUsersCount = 0;
 $recentBookings = [];
 $revenueGrowth = 0;
-$newRentalsCount = 0;
-$newUsersCount = 0;
-
-// Recent Bookings
-
-// Recent Bookings
 include 'includes/header.php';
 ?>
 <div class="d-flex" id="wrapper">
     <?php include 'includes/admin_sidebar.php'; ?>
 
-    <!-- Page Content -->
     <main id="page-content-wrapper" class="bg-light w-100">
         <div class="container-fluid px-4 py-5">
             <?php if ($flash): ?>
@@ -702,13 +662,10 @@ include 'includes/header.php';
 
             <?php if ($currentTab === 'overview'): ?>
                 <?php
-                // --- CALCULATION LOGIC MOVED HERE ---
-                // Total Revenue
                 $revRes = mysqli_query($conn, "SELECT SUM(total_cost) as total FROM rentals WHERE status = 'approved'");
                 $revRow = ($revRes) ? mysqli_fetch_assoc($revRes) : null;
                 $totalRevenue = $revRow['total'] ?? 0;
 
-                // Revenue Growth
                 $currentMonthRevSql = "SELECT SUM(total_cost) as total FROM rentals WHERE status = 'approved' AND MONTH(start_date) = MONTH(CURRENT_DATE()) AND YEAR(start_date) = YEAR(CURRENT_DATE())";
                 $lastMonthRevSql = "SELECT SUM(total_cost) as total FROM rentals WHERE status = 'approved' AND MONTH(start_date) = MONTH(CURRENT_DATE() - INTERVAL 1 MONTH) AND YEAR(start_date) = YEAR(CURRENT_DATE() - INTERVAL 1 MONTH)";
 
@@ -727,22 +684,18 @@ include 'includes/header.php';
                     $revenueGrowth = 100;
                 }
 
-                // Active Rentals
                 $activeRes = mysqli_query($conn, "SELECT COUNT(*) as total FROM properties WHERE status = 'rented'");
                 $activeRow = ($activeRes) ? mysqli_fetch_assoc($activeRes) : null;
                 $activeRentals = $activeRow['total'] ?? 0;
 
-                // New Rentals
                 $newRentalsRes = mysqli_query($conn, "SELECT COUNT(*) as total FROM rentals WHERE status = 'approved' AND start_date >= DATE(NOW() - INTERVAL 7 DAY)");
                 $newRentalsRow = ($newRentalsRes) ? mysqli_fetch_assoc($newRentalsRes) : null;
                 $newRentalsCount = $newRentalsRow['total'] ?? 0;
 
-                // Active Users
                 $userRes = mysqli_query($conn, "SELECT COUNT(*) as total FROM users WHERE role = 'user'");
                 $userRow = ($userRes) ? mysqli_fetch_assoc($userRes) : null;
                 $activeUsersCount = $userRow['total'] ?? 0;
 
-                // New Users
                 $newUsersRes = mysqli_query($conn, "SELECT COUNT(*) as total FROM users WHERE status = 'active' AND created_at >= DATE(NOW() - INTERVAL 30 DAY)");
                 $newUsersRow = ($newUsersRes) ? mysqli_fetch_assoc($newUsersRes) : null;
                 $newUsersCount = $newUsersRow['total'] ?? 0;
@@ -751,7 +704,6 @@ include 'includes/header.php';
                 $pendingRow = ($pendingRes) ? mysqli_fetch_assoc($pendingRes) : null;
                 $pendingRequests = $pendingRow['total'] ?? 0;
 
-                // Fetch Pending List Details
                 $pendingList = [];
                 if ($pendingRequests > 0) {
                     $pListQ = "SELECT r.*, p.name as property_name, u.name as user_name 
@@ -766,11 +718,9 @@ include 'includes/header.php';
                     }
                 }
                 ?>
-
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h2 class="fw-bold mb-0">Overview</h2>
                 </div>
-
                 <div class="row g-4 mb-4">
                     <div class="col-md-3">
                         <div class="stat-card">
@@ -784,7 +734,7 @@ include 'includes/header.php';
                                     </div>
                                 </div>
                                 <div class="icon-box">
-                                    <i class="fas fa-dollar-sign"></i>
+                                    <span class="fas fa-dollar-sign" aria-hidden="true"></span>
                                 </div>
                             </div>
                         </div>
@@ -798,7 +748,7 @@ include 'includes/header.php';
                                     <div class="change positive">+<?php echo $newRentalsCount; ?> started this week</div>
                                 </div>
                                 <div class="icon-box">
-                                    <i class="fas fa-home"></i>
+                                    <span class="fas fa-home" aria-hidden="true"></span>
                                 </div>
                             </div>
                         </div>
@@ -812,7 +762,7 @@ include 'includes/header.php';
                                     <div class="change text-muted">Awaiting approval</div>
                                 </div>
                                 <div class="icon-box">
-                                    <i class="fas fa-calendar-check"></i>
+                                    <span class="fas fa-calendar-check" aria-hidden="true"></span>
                                 </div>
                             </div>
                         </div>
@@ -826,14 +776,12 @@ include 'includes/header.php';
                                     <div class="change positive">+<?php echo $newUsersCount; ?> new this month</div>
                                 </div>
                                 <div class="icon-box">
-                                    <i class="fas fa-users"></i>
+                                    <span class="fas fa-users" aria-hidden="true"></span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <!-- Pending Requests Section -->
                 <?php if (!empty($pendingList)): ?>
                     <div class="mb-4">
                         <h3 class="h5 fw-bold mb-3">Pending Approvals</h3>
@@ -893,26 +841,24 @@ include 'includes/header.php';
                     </div>
                 <?php endif; ?>
 
-
-
             <?php elseif ($currentTab === 'properties'): ?>
                 <div class="property-header">
                     <div>
                         <h2>Properties</h2>
                         <p>Manage your property listings</p>
                     </div>
-                    <a href="#property-form" class="btn-add-property"
-                        onclick="if(document.getElementById('property-form').classList.contains('d-none')) { document.getElementById('property-form').classList.remove('d-none'); } else { document.getElementById('property-form').scrollIntoView(); }">
-                        <i class="fas fa-plus"></i> Add Property
+                    <a href="#" class="btn btn-primary rounded-pill px-4 shadow-sm fw-bold"
+                        onclick="if(document.getElementById('property-form').classList.contains('d-none')) { document.getElementById('property-form').classList.remove('d-none'); } else { document.getElementById('property-form').scrollIntoView(); } return false;">
+                        <span class="fas fa-plus" aria-hidden="true"></span> Add Property
                     </a>
                 </div>
 
                 <div class="search-bar">
-                    <i class="fas fa-search"></i>
-                    <input type="text" id="property-search" placeholder="Search properties..." onkeyup="filterProperties()">
+                    <span class="fas fa-search" aria-hidden="true"></span>
+                    <input type="text" id="property-search" aria-label="Search properties" title="Search properties"
+                        placeholder="Search properties..." onkeyup="filterProperties()">
                 </div>
 
-                <!-- Hidden Form for Creating/Editing (Toggleable) -->
                 <div class="form-section p-4 shadow-sm mb-4 bg-white rounded-4 <?php echo ($formMode === 'create' && !isset($_GET['edit']) && empty($errors)) ? 'd-none' : ''; ?>"
                     id="property-form">
                     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -967,6 +913,7 @@ include 'includes/header.php';
                                     value="<?php echo htmlspecialchars((string) ($formData['lng'] ?? '')); ?>">
                                 <div id="location-suggestions" class="list-group position-absolute w-100 shadow-sm"
                                     style="z-index: 1050; display: none;"></div>
+                                <div id="map-picker" class="mt-2 rounded-3 border" style="height: 250px;"></div>
                             </div>
                             <script>
                                 document.addEventListener('DOMContentLoaded', function () {
@@ -974,8 +921,74 @@ include 'includes/header.php';
                                     const latInput = document.getElementById('lat');
                                     const lngInput = document.getElementById('lng');
                                     const suggestions = document.getElementById('location-suggestions');
-                                    let debounce;
 
+
+                                    let mapPicker, markerPicker;
+                                    const defaultLat = 41.9028;
+                                    const defaultLng = 12.4964;
+
+                                    function initMapPicker() {
+                                        if (mapPicker) return;
+
+
+                                        const curLat = parseFloat(latInput.value) || defaultLat;
+                                        const curLng = parseFloat(lngInput.value) || defaultLng;
+
+                                        mapPicker = L.map('map-picker').setView([curLat, curLng], 13);
+                                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                            attribution: '© OpenStreetMap'
+                                        }).addTo(mapPicker);
+
+                                        markerPicker = L.marker([curLat, curLng], { draggable: true }).addTo(mapPicker);
+
+
+                                        mapPicker.on('click', function (e) {
+                                            const { lat, lng } = e.latlng;
+                                            updateMarker(lat, lng);
+
+                                        });
+
+
+                                        markerPicker.on('dragend', function (e) {
+                                            const { lat, lng } = markerPicker.getLatLng();
+                                            latInput.value = lat;
+                                            lngInput.value = lng;
+                                        });
+                                    }
+
+                                    function updateMarker(lat, lng) {
+                                        markerPicker.setLatLng([lat, lng]);
+                                        mapPicker.setView([lat, lng], 13);
+                                        latInput.value = lat;
+                                        lngInput.value = lng;
+                                    }
+
+
+
+
+
+
+                                    const formSection = document.getElementById('property-form');
+                                    const observer = new MutationObserver(function (mutations) {
+                                        mutations.forEach(function (mutation) {
+                                            if (!formSection.classList.contains('d-none')) {
+                                                if (!mapPicker) {
+                                                    initMapPicker();
+                                                } else {
+                                                    setTimeout(() => mapPicker.invalidateSize(), 200);
+                                                }
+                                            }
+                                        });
+                                    });
+                                    observer.observe(formSection, { attributes: true, attributeFilter: ['class'] });
+
+
+                                    if (!formSection.classList.contains('d-none')) {
+                                        initMapPicker();
+                                    }
+
+
+                                    let debounce;
                                     locInput.addEventListener('input', function () {
                                         clearTimeout(debounce);
                                         const q = this.value;
@@ -992,13 +1005,20 @@ include 'includes/header.php';
                                                             const a = document.createElement('a');
                                                             a.className = 'list-group-item list-group-item-action cursor-pointer small';
                                                             a.textContent = item.display_name;
-                                                            a.href = '#';
                                                             a.onclick = (e) => {
                                                                 e.preventDefault();
                                                                 locInput.value = item.display_name;
-                                                                latInput.value = item.lat;
-                                                                lngInput.value = item.lon;
                                                                 suggestions.style.display = 'none';
+
+
+                                                                const lat = parseFloat(item.lat);
+                                                                const lon = parseFloat(item.lon);
+                                                                if (mapPicker) {
+                                                                    updateMarker(lat, lon);
+                                                                } else {
+                                                                    latInput.value = lat;
+                                                                    lngInput.value = lon;
+                                                                }
                                                             };
                                                             suggestions.appendChild(a);
                                                         });
@@ -1008,6 +1028,7 @@ include 'includes/header.php';
                                                 });
                                         }, 400);
                                     });
+
                                     document.addEventListener('click', e => {
                                         if (e.target !== locInput) suggestions.style.display = 'none';
                                     });
@@ -1085,9 +1106,9 @@ include 'includes/header.php';
                                 <?php if ($properties): ?>
                                     <?php foreach ($properties as $row): ?>
                                         <?php
-                                        // Determine image
+
                                         $imgSrc = $row['image_url'] ?: ($defaultImages[$row['type']] ?? 'images/placeholder.png');
-                                        // Map status for pill
+
                                         $pillClass = 'inactive';
                                         $pillText = 'Inactive';
                                         if ($row['status'] === 'available') {
@@ -1119,15 +1140,18 @@ include 'includes/header.php';
                                                 <div class="dropdown">
                                                     <button class="btn btn-link action-menu text-decoration-none p-0" type="button"
                                                         data-bs-toggle="dropdown" aria-expanded="false" aria-label="Actions">
-                                                        <i class="fas fa-ellipsis-v"></i>
+                                                        <span class="fas fa-ellipsis-v" aria-hidden="true"></span>
                                                     </button>
                                                     <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
                                                         <li><a class="dropdown-item small"
-                                                                href="admin.php?tab=properties&edit=<?php echo $row['id']; ?>"><i
-                                                                    class="fas fa-edit me-2"></i> Edit</a></li>
-                                                        <li><a class="dropdown-item small text-danger"
-                                                                href="admin.php?tab=properties&delete=<?php echo $row['id']; ?>"><i
-                                                                    class="fas fa-trash me-2"></i> Delete</a></li>
+                                                                href="admin.php?tab=properties&edit=<?php echo $row['id']; ?>"><span
+                                                                    class="fas fa-edit me-2" aria-hidden="true"></span> Edit</a>
+                                                        </li>
+                                                        <li><button class="dropdown-item small text-danger" data-bs-toggle="modal"
+                                                                data-bs-target="#deleteConfirmationModal"
+                                                                data-delete-url="admin.php?tab=properties&delete=<?php echo $row['id']; ?>">
+                                                                <span class="fas fa-trash me-2" aria-hidden="true"></span>
+                                                                Delete</button></li>
                                                     </ul>
                                                 </div>
                                             </td>
@@ -1143,29 +1167,14 @@ include 'includes/header.php';
                     </div>
                 </div>
 
-                <script>
-                    function filterProperties() {
-                        var input = document.getElementById("property-search");
-                        var filter = input.value.toLowerCase();
-                        var tbody = document.getElementById("property-list");
-                        var tr = tbody.getElementsByTagName("tr");
-
-                        for (var i = 0; i < tr.length; i++) {
-                            var nameCol = tr[i].getElementsByClassName("property-name")[0];
-                            if (nameCol) {
-                                var txtValue = nameCol.textContent || nameCol.innerText;
-                                if (txtValue.toLowerCase().indexOf(filter) > -1) {
-                                    tr[i].style.display = "";
-                                } else {
-                                    tr[i].style.display = "none";
-                                }
-                            }
-                        }
+                <script>                 function filterProperties() {
+                        var input = document.getElementById("property-search"); var filter = input.value.toLowerCase(); var tbody = document.getElementById("property-list"); var tr = tbody.getElementsByTagName("tr");
+                        for (var i = 0; i < tr.length; i++) { var nameCol = tr[i].getElementsByClassName("property-name")[0]; if (nameCol) { var txtValue = nameCol.textContent || nameCol.innerText; if (txtValue.toLowerCase().indexOf(filter) > -1) { tr[i].style.display = ""; } else { tr[i].style.display = "none"; } } }
                     }
                 </script>
 
             <?php elseif ($currentTab === 'users'): ?>
-                <!-- Users Content (Reused) -->
+
                 <div class="property-header">
                     <div>
                         <h2>Users</h2>
@@ -1180,7 +1189,7 @@ include 'includes/header.php';
                         <?php if ($editUser): ?>
                             <input type="hidden" name="user_id" value="<?php echo $editUser['id']; ?>">
                         <?php endif; ?>
-                        <!-- User Fields -->
+
                         <div class="row g-3">
                             <div class="col-md-12">
                                 <label for="name" class="form-label fw-bold">Full Name</label>
@@ -1224,7 +1233,6 @@ include 'includes/header.php';
                     </form>
                 </div>
 
-
                 <div class="bg-white shadow-sm rounded-4 overflow-hidden">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
@@ -1249,7 +1257,9 @@ include 'includes/header.php';
                             <tbody>
                                 <?php foreach ($usersList as $u): ?>
                                     <tr class="align-middle">
-                                        <td class="px-4">#<?php echo $u['id']; ?></td>
+                                        <td class="px-4">
+                                            <?php echo $u['id']; ?>
+                                        </td>
                                         <td class="fw-bold"><?php echo htmlspecialchars($u['name']); ?></td>
                                         <td><?php echo htmlspecialchars($u['email']); ?></td>
                                         <td>
@@ -1275,13 +1285,18 @@ include 'includes/header.php';
                                                 aria-label="Chat with <?php echo htmlspecialchars($u['name']); ?>">
                                                 <i class="fas fa-comment-dots"></i>
                                             </button>
-                                            <a href="admin.php?tab=users&edit_user=<?php echo $u['id']; ?>#user-form"
-                                                class="btn btn-sm btn-outline-primary fas fa-edit"
-                                                aria-label="Edit <?php echo htmlspecialchars($u['name']); ?>"></a>
+                                            <a href="admin.php?tab=users&edit_user=<?php echo $u['id']; ?>"
+                                                class="btn btn-sm btn-outline-primary"
+                                                aria-label="Edit <?php echo htmlspecialchars($u['name']); ?>">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
                                             <?php if ($u['id'] != $_SESSION['user_id']): ?>
-                                                <a href="admin.php?tab=users&delete_user=<?php echo $u['id']; ?>"
-                                                    class="btn btn-sm btn-outline-danger fas fa-trash"
-                                                    aria-label="Delete <?php echo htmlspecialchars($u['name']); ?>"></a>
+                                                <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal"
+                                                    data-bs-target="#deleteConfirmationModal"
+                                                    data-delete-url="admin.php?tab=users&delete_user=<?php echo $u['id']; ?>"
+                                                    aria-label="Delete <?php echo htmlspecialchars($u['name']); ?>">
+                                                    <i class=" fas fa-trash"></i>
+                                                </button>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -1317,9 +1332,8 @@ include 'includes/header.php';
                                         <small class="text-muted d-block mb-2">
                                             <?php echo $mu['last_msg_time'] ? date('M j, H:i', strtotime($mu['last_msg_time'])) : ''; ?>
                                         </small>
-                                        <button class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal"
-                                            data-bs-target="#chatModal" data-user-id="<?php echo $mu['id']; ?>"
-                                            data-user-name="<?php echo htmlspecialchars($mu['name']); ?>"
+                                        <button class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="
+                                            data-user-name=" <?php echo htmlspecialchars($mu['name']); ?>"
                                             aria-label="Chat with <?php echo htmlspecialchars($mu['name']); ?>">
                                             <i class="fas fa-comment-dots me-2"></i> Chat
                                         </button>
@@ -1342,7 +1356,6 @@ include 'includes/header.php';
                         <form method="post">
                             <input type="hidden" name="action" value="update_settings">
 
-                            <!-- General Settings -->
                             <div class="bg-white rounded-4 shadow-sm p-4 mb-4">
                                 <h3 class="h5 fw-bold mb-3">General Information</h3>
                                 <div class="row g-3">
@@ -1364,7 +1377,6 @@ include 'includes/header.php';
                                 </div>
                             </div>
 
-                            <!-- Security Settings -->
                             <div class="bg-white rounded-4 shadow-sm p-4 mb-4">
                                 <h3 class="h5 fw-bold mb-3">Security</h3>
                                 <div class="mb-3">
@@ -1385,15 +1397,12 @@ include 'includes/header.php';
                                 </div>
                             </div>
 
-
-
                             <div class="d-flex justify-content-end">
                                 <button type="submit" class="btn btn-primary px-4">Save Changes</button>
                             </div>
                         </form>
                     </div>
 
-                    <!-- Side Panel Info -->
                     <div class="col-md-4">
                         <div class="bg-white rounded-4 shadow-sm p-4 mb-4">
                             <h3 class="h5 fw-bold mb-3">System Info</h3>
@@ -1424,7 +1433,7 @@ include 'includes/header.php';
         </div>
         <?php include 'includes/footer_content.php'; ?>
     </main>
-    <!-- /#page-content-wrapper -->
+
 </div>
 <script>
     var el = document.getElementById("wrapper");
@@ -1438,8 +1447,44 @@ include 'includes/header.php';
 </script>
 <?php include 'includes/scripts.php'; ?>
 
-<!-- Chat Modal -->
-<div class="modal fade" id="chatModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-body p-4 text-center">
+                <div class="mb-3">
+                    <div class="bg-danger bg-opacity-10 rounded-circle d-inline-flex align-items-center justify-content-center"
+                        style="width: 80px; height: 80px;">
+                        <i class="fas fa-exclamation-triangle text-danger display-4"></i>
+                    </div>
+                </div>
+                <h4 class="fw-bold mb-2">Are you sure?</h4>
+                <p class="text-muted mb-4">You are about to delete this item. This action cannot be undone.</p>
+                <div class="d-flex justify-content-center gap-2">
+                    <button type="button" class="btn btn-light rounded-pill px-4 fw-bold"
+                        data-bs-dismiss="modal">Cancel</button>
+                    <a href="#" id="confirmDeleteBtn" class="btn btn-danger rounded-pill px-4 fw-bold">Delete
+                        It</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var deleteModal = document.getElementById('deleteConfirmationModal');
+        if (deleteModal) {
+            deleteModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                var deleteUrl = button.getAttribute('data-delete-url');
+                var confirmBtn = document.getElementById('confirmDeleteBtn');
+                confirmBtn.href = deleteUrl;
+            });
+        }
+    });
+</script>
+
+<div class=" modal fade" id="chatModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4 shadow-sm border-0">
             <div class="modal-header border-bottom-0">
@@ -1455,9 +1500,9 @@ include 'includes/header.php';
                     <input type="hidden" name="receiver_id" id="chat-receiver-id">
                     <div class="input-group">
                         <input type="text" name="message" class="form-control border-0 bg-light rounded-start-pill ps-3"
-                            placeholder="Type a message..." required>
+                            placeholder="Type a message..." aria-label="Message" title="Message" required>
                         <button class="btn btn-primary rounded-end-pill px-4" type="submit" aria-label="Send message">
-                            <i class="fas fa-paper-plane"></i>
+                            <span class="fas fa-paper-plane" aria-hidden="true"></span>
                         </button>
                     </div>
                 </form>
@@ -1466,7 +1511,6 @@ include 'includes/header.php';
     </div>
 </div>
 
-<!-- Chat Script -->
 <script>
     const chatModal = document.getElementById('chatModal');
     if (chatModal) {
@@ -1478,21 +1522,20 @@ include 'includes/header.php';
 
             const title = chatModal.querySelector('.modal-title');
             const hiddenRental = document.getElementById('chat-rental-id');
-            const hiddenReceiver = document.getElementById('chat-receiver-id'); // Need to add this input
+            const hiddenReceiver = document.getElementById('chat-receiver-id');
 
-            // Reset inputs
             hiddenRental.value = '';
             if (hiddenReceiver) hiddenReceiver.value = '';
 
             if (userId) {
-                // User Chat
+
                 hiddenReceiver.value = userId;
                 title.textContent = 'Chat with ' + userName;
                 loadMessages(null, userId);
             } else if (rentalId) {
-                // Rental Chat
+
                 hiddenRental.value = rentalId;
-                title.textContent = 'Rental Chat'; // Or specific
+                title.textContent = 'Rental Chat';
                 loadMessages(rentalId, null);
             }
         });

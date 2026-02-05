@@ -1,7 +1,13 @@
 <?php
+ob_start();
+include '../includes/functions.php';
 include '../db/db_config.php';
-session_start();
 
+if (session_status() === PHP_SESSION_NONE) {
+    sec_session_start();
+}
+
+ob_clean();
 header('Content-Type: application/json');
 
 if (!isset($_SESSION['user_id'])) {
@@ -19,4 +25,3 @@ if ($row = mysqli_fetch_assoc($res)) {
     echo json_encode(['success' => false, 'message' => 'No admin found']);
 }
 mysqli_stmt_close($stmt);
-?>

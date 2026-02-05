@@ -413,3 +413,16 @@ a.btn-add-property {
     color: #94a3b8;
     cursor: pointer;
 }
+/* Users Section Styles */
+.users-table-wrapper {
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+}
+
+.users-table-wrapper .table {
+    background: white;
+}
+
+.users-table-wrapper .table thead {
+    background-color: #f8f9fa !important;
+}

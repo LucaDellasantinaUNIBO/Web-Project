@@ -1,5 +1,5 @@
-<?php
-/** @var mysqli $conn */
+﻿<?php
+
 include 'db/db_config.php';
 include 'includes/auth.php';
 
@@ -9,7 +9,6 @@ $userId = $_SESSION['user_id'];
 $success = null;
 $errors = [];
 
-// Handle "Add Funds" logic
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_funds') {
     $amountInput = trim($_POST['amount'] ?? '');
     $cardholderInput = trim($_POST['cardholder'] ?? '');
@@ -26,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $errors[] = 'Cardholder name is too short.';
     }
 
-    // Check custom card validation against DB
+    
     if (empty($errors)) {
         $stmt = mysqli_prepare($conn, "SELECT mock_card_number, mock_cvc, mock_expiry FROM users WHERE id = ?");
         mysqli_stmt_bind_param($stmt, "i", $userId);
@@ -39,13 +38,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $dbCvc = $userCardData['mock_cvc'] ?? '';
         $dbExp = $userCardData['mock_expiry'] ?? '';
 
-        if ($cardNumberRaw !== $dbCard || $cvcRaw !== $dbCvc || $expiryInput !== $dbExp) {
+        
+        $cardNumberClean = str_replace(' ', '', $cardNumberRaw);
+
+        if ($cardNumberClean !== $dbCard || $cvcRaw !== $dbCvc || $expiryInput !== $dbExp) {
             $errors[] = 'Payment failed: Card details do not match our records.';
         }
     }
 
     if (empty($errors)) {
-        // Fetch current credit first
+        
         $stmt = mysqli_prepare($conn, "SELECT credit FROM users WHERE id = ?");
         mysqli_stmt_bind_param($stmt, "i", $userId);
         mysqli_stmt_execute($stmt);
@@ -66,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         $transactionOk = true;
-        // Insert transaction
+        
         $transactionStmt = mysqli_prepare($conn, "INSERT INTO transactions (user_id, type, amount, balance_after, description) VALUES (?, 'topup', ?, ?, 'Wallet credit')");
         if ($transactionStmt) {
             mysqli_stmt_bind_param($transactionStmt, "idd", $userId, $amountValue, $newBalance);
@@ -84,8 +86,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
-
-// Fetch user credit and card details
 $credit = 0.0;
 $userCardNumber = '';
 $stmt = mysqli_prepare($conn, "SELECT credit, mock_card_number FROM users WHERE id = ?");
@@ -98,7 +98,6 @@ if ($row = mysqli_fetch_assoc($result)) {
 }
 mysqli_stmt_close($stmt);
 
-// Fetch total paid (This Year vs Last Year)
 $totalPaid = 0.0;
 $lastYearPaid = 0.0;
 $startOfYear = date('Y-01-01');
@@ -106,17 +105,15 @@ $endOfYear = date('Y-12-31');
 $startOfLastYear = date('Y-01-01', strtotime('-1 year'));
 $endOfLastYear = date('Y-12-31', strtotime('-1 year'));
 
-// Current Year
 $stmt = mysqli_prepare($conn, "SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = 'rental' AND created_at >= ? AND created_at <= ?");
 mysqli_stmt_bind_param($stmt, "iss", $userId, $startOfYear, $endOfYear);
 mysqli_stmt_execute($stmt);
 $res = mysqli_stmt_get_result($stmt);
 if ($r = mysqli_fetch_assoc($res)) {
-    $totalPaid = abs((float) $r['total']); // Rentals are usually stored negative or positive depending on implementation, ensuring positive for display
+    $totalPaid = abs((float) $r['total']); 
 }
 mysqli_stmt_close($stmt);
 
-// Last Year
 $stmt = mysqli_prepare($conn, "SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = 'rental' AND created_at >= ? AND created_at <= ?");
 mysqli_stmt_bind_param($stmt, "iss", $userId, $startOfLastYear, $endOfLastYear);
 mysqli_stmt_execute($stmt);
@@ -126,7 +123,6 @@ if ($r = mysqli_fetch_assoc($res)) {
 }
 mysqli_stmt_close($stmt);
 
-// Growth Calculation
 $spendingGrowth = 0;
 if ($lastYearPaid > 0) {
     $spendingGrowth = (($totalPaid - $lastYearPaid) / $lastYearPaid) * 100;
@@ -134,7 +130,6 @@ if ($lastYearPaid > 0) {
     $spendingGrowth = 100;
 }
 
-// Fetch last payment
 $lastPayment = 0.0;
 $lastPaymentDate = '-';
 $stmt = mysqli_prepare($conn, "SELECT amount, created_at FROM transactions WHERE user_id = ? AND type = 'rental' ORDER BY created_at DESC LIMIT 1");
@@ -147,8 +142,6 @@ if ($r = mysqli_fetch_assoc($res)) {
 }
 mysqli_stmt_close($stmt);
 
-
-// Fetch Transactions
 $transactions = [];
 $stmt = mysqli_prepare($conn, "SELECT type, amount, balance_after, description, created_at FROM transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 20");
 mysqli_stmt_bind_param($stmt, "i", $userId);
@@ -160,7 +153,6 @@ if ($res) {
     }
 }
 mysqli_stmt_close($stmt);
-
 
 include 'includes/header.php';
 ?>
@@ -194,7 +186,7 @@ include 'includes/header.php';
                             <div class="position-relative z-1">
                                 <p class="mb-1 opacity-75">Total Balance Due</p>
                                 <h2 class="h3 fw-bold mb-1">
-                                    €<?php echo number_format(0, 2, ',', '.'); // Hardcoded as per screenshot implies 'Due' or maybe it means Credit? Screenshot says 0.00 ?>
+                                    €<?php echo number_format(0, 2, ',', '.'); ?>
                                 </h2>
                                 <p class="small mb-0"><i class="fas fa-check-circle me-1"></i> All payments up to date
                                 </p>
@@ -238,10 +230,10 @@ include 'includes/header.php';
                     document.getElementById('addFundsBtn').addEventListener('click', function () {
                         var hasCard = <?php echo json_encode(!empty($userCardNumber)); ?>;
                         if (!hasCard) {
-                            // Redirect to profile with message
+                            
                             window.location.href = 'profile.php?no_card=1';
                         } else {
-                            // Open modal
+                            
                             var modal = new bootstrap.Modal(document.getElementById('addFundsModal'));
                             modal.show();
                         }
@@ -356,21 +348,21 @@ include 'includes/header.php';
                             const cardInput = document.getElementById('card_number_input');
                             if (cardInput) {
                                 cardInput.addEventListener('input', function (e) {
-                                    // Remove all non-digits
+                                    
                                     let value = e.target.value.replace(/\D/g, '');
-                                    // Add space every 4 digits
+                                    
                                     value = value.replace(/(\d{4})(?=\d)/g, '$1 ');
                                     e.target.value = value;
                                 });
                             }
 
-                            // Add expiry formatting
+                            
                             const expiryInputs = document.querySelectorAll('input[name="expiry"]');
                             expiryInputs.forEach(function (expiryInput) {
                                 expiryInput.addEventListener('input', function (e) {
                                     let value = e.target.value.replace(/\D/g, '');
                                     if (value.length >= 2) {
-                                        // Validate month is between 01-12
+                                        
                                         let month = parseInt(value.slice(0, 2));
                                         if (month > 12) {
                                             value = '12' + value.slice(2);

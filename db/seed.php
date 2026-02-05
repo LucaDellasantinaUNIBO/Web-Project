@@ -1,5 +1,5 @@
-<?php
-/** @var mysqli $conn */
+﻿<?php
+
 include 'db_config.php';
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -18,7 +18,7 @@ $report = [
     'rentals_skipped' => 0,
     'rentals_missing' => 0
 ];
-$requiredTables = ['users', 'properties', 'rentals', 'transactions', 'issues', 'change_log'];
+$requiredTables = ['users', 'properties', 'rentals', 'transactions', 'change_log'];
 $missingTables = [];
 
 function table_exists(mysqli $conn, string $table): bool
@@ -39,7 +39,6 @@ $schemaLoaded = false;
 $schemaErrors = [];
 $schemaPath = __DIR__ . '/schema.sql';
 
-// Move reset logic to top to ensure schema re-load works
 if ($shouldRun && isset($_GET['reset']) && $_GET['reset'] === '1') {
     mysqli_query($conn, "SET FOREIGN_KEY_CHECKS = 0");
     foreach ($requiredTables as $t) {
@@ -47,13 +46,13 @@ if ($shouldRun && isset($_GET['reset']) && $_GET['reset'] === '1') {
     }
     mysqli_query($conn, "SET FOREIGN_KEY_CHECKS = 1");
     $alerts[] = ['type' => 'warning', 'message' => 'Database dropped and reset successfully. Re-creating schema...'];
-    // Force missing tables check to confirm they are gone
+
     $missingTables = $requiredTables;
     $schemaReady = false;
 }
 
 if ($shouldRun) {
-    // 1. Check/Run Schema
+
     if (!$schemaReady) {
         if (!is_readable($schemaPath)) {
             $schemaErrors[] = 'Schema not found in db/schema.sql.';
@@ -100,7 +99,6 @@ if (!$schemaReady) {
     $alerts[] = ['type' => 'warning', 'message' => 'Missing tables: ' . implode(', ', $missingTables) . '.'];
 }
 
-// 2.5 Ensure Schema Updates (Add columns if missing)
 if ($shouldRun && $schemaReady) {
     function check_and_add_column($conn, $table, $column, $definition)
     {
@@ -123,14 +121,18 @@ if ($shouldRun && $schemaReady) {
     }
 }
 
-// 2. Run Seed Logic
 if ($shouldRun && $schemaReady) {
     function get_auth_data($password)
     {
-        return ['password' => password_hash($password, PASSWORD_DEFAULT)];
+        $salt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
+
+        $p_client = hash('sha512', $password);
+
+        $p_server = hash('sha512', $p_client . $salt);
+        return ['password' => $p_server, 'salt' => $salt];
     }
 
-    // 2.5 Ensure Schema Updates (Add columns if missing)
+
     if ($showSchemaUpdates) {
         $colsAdded = 0;
         if (check_and_add_column($conn, 'properties', 'lat', 'DECIMAL(10, 8) DEFAULT NULL'))
@@ -144,13 +146,25 @@ if ($shouldRun && $schemaReady) {
         if (check_and_add_column($conn, 'properties', 'baths', 'TINYINT DEFAULT 1'))
             $colsAdded++;
 
-        // Mock Card Columns
+
         if (check_and_add_column($conn, 'users', 'mock_card_number', 'VARCHAR(20) DEFAULT NULL'))
             $colsAdded++;
         if (check_and_add_column($conn, 'users', 'mock_cvc', 'VARCHAR(5) DEFAULT NULL'))
             $colsAdded++;
         if (check_and_add_column($conn, 'users', 'mock_expiry', 'VARCHAR(7) DEFAULT NULL'))
             $colsAdded++;
+
+
+        if (check_and_add_column($conn, 'messages', 'receiver_id', 'INT NOT NULL'))
+            $colsAdded++;
+
+        $checkMsg = mysqli_query($conn, "SHOW COLUMNS FROM `messages` LIKE 'rental_id'");
+        if ($row = mysqli_fetch_assoc($checkMsg)) {
+            if ($row['Null'] === 'NO') {
+                mysqli_query($conn, "ALTER TABLE `messages` MODIFY `rental_id` INT DEFAULT NULL");
+                $colsAdded++;
+            }
+        }
 
         if ($colsAdded > 0) {
             $alerts[] = ['type' => 'success', 'message' => "Updated schema with $colsAdded new columns."];
@@ -160,41 +174,23 @@ if ($shouldRun && $schemaReady) {
     $adminAuth = get_auth_data('admin123');
     $userAuth = get_auth_data('student123');
 
-    // --- Users Data ---
+
     $users = [
         [
             'first_name' => 'Admin',
             'last_name' => 'User',
             'email' => 'admin@example.com',
-            'password' => $adminAuth['password'],
+            'password' => $adminAuth,
             'role' => 'admin',
             'credit' => 0.00,
             'card' => null
-        ],
-        [
-            'first_name' => 'Alex',
-            'last_name' => 'Tenant',
-            'email' => 'alex@tenant.com',
-            'password' => $userAuth['password'],
-            'role' => 'user',
-            'credit' => 1500.00,
-            'card' => ['4111 2222 3333 4444', '123', '12/30']
-        ],
-        [
-            'first_name' => 'Maya',
-            'last_name' => 'Lee',
-            'email' => 'maya@tenant.com',
-            'password' => $userAuth['password'],
-            'role' => 'user',
-            'status' => 'active',
-            'credit' => 500.00,
-            'card' => ['5555 6666 7777 8888', '456', '09/28']
         ]
     ];
 
-    // --- Insert Users ---
+
     $selectUserStmt = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ?");
-    $insertUserStmt = mysqli_prepare($conn, "INSERT INTO users (first_name, last_name, name, email, password, role, status, credit, mock_card_number, mock_cvc, mock_expiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+    $insertUserStmt = mysqli_prepare($conn, "INSERT INTO users (first_name, last_name, name, email, password, salt, role, status, credit, mock_card_number, mock_cvc, mock_expiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     foreach ($users as $user) {
         mysqli_stmt_bind_param($selectUserStmt, "s", $user['email']);
@@ -206,126 +202,30 @@ if ($shouldRun && $schemaReady) {
         $cardCvc = $user['card'][1] ?? null;
         $cardExp = $user['card'][2] ?? null;
         $fullName = $user['first_name'] . ' ' . $user['last_name'];
+        $salt = $user['password']['salt'];
+        $password = $user['password']['password'];
 
         if ($exists) {
-            // Update existing user
-            $updateUserStmt = mysqli_prepare($conn, "UPDATE users SET first_name=?, last_name=?, name=?, password=?, role=?, status=?, credit=?, mock_card_number=?, mock_cvc=?, mock_expiry=? WHERE email=?");
+
+            $updateUserStmt = mysqli_prepare($conn, "UPDATE users SET first_name=?, last_name=?, name=?, password=?, salt=?, role=?, status=?, credit=?, mock_card_number=?, mock_cvc=?, mock_expiry=? WHERE email=?");
             $status = $user['status'] ?? 'active';
-            mysqli_stmt_bind_param($updateUserStmt, "ssssssdssss", $user['first_name'], $user['last_name'], $fullName, $user['password'], $user['role'], $status, $user['credit'], $cardNum, $cardCvc, $cardExp, $user['email']);
+            mysqli_stmt_bind_param($updateUserStmt, "ssssssssdsss", $user['first_name'], $user['last_name'], $fullName, $password, $salt, $user['role'], $status, $user['credit'], $cardNum, $cardCvc, $cardExp, $user['email']);
             mysqli_stmt_execute($updateUserStmt);
-            $report['users_added']++; // Count as processed
+            $report['users_added']++;
             continue;
         }
 
         $status = $user['status'] ?? 'active';
-        mysqli_stmt_bind_param($insertUserStmt, "sssssssdsss", $user['first_name'], $user['last_name'], $fullName, $user['email'], $user['password'], $user['role'], $status, $user['credit'], $cardNum, $cardCvc, $cardExp);
+        mysqli_stmt_bind_param($insertUserStmt, "ssssssssdsss", $user['first_name'], $user['last_name'], $fullName, $user['email'], $password, $salt, $user['role'], $status, $user['credit'], $cardNum, $cardCvc, $cardExp);
         if (mysqli_stmt_execute($insertUserStmt)) {
             $report['users_added']++;
         }
     }
 
-    mysqli_stmt_close($selectUserStmt);
     mysqli_stmt_close($insertUserStmt);
 
-    // --- Properties Data ---
-    $properties = [
-        [
-            'name' => 'Trilocale Luminoso Centro',
-            'type' => 'Appartamento',
-            'status' => 'available',
-            'location' => 'Bologna, Centro Storico',
-            'rooms' => 3,
-            'monthly_price' => 1200.00,
-            'image_url' => 'images/trilocale.png',
-            'lat' => 44.4949,
-            'lng' => 11.3426,
-            'sqm' => 85,
-            'beds' => 2,
-            'baths' => 1
-        ],
-        [
-            'name' => 'Villa Esclusiva con Parco',
-            'type' => 'Villa',
-            'status' => 'available',
-            'location' => 'Cesena, Zona Mare',
-            'rooms' => 5,
-            'monthly_price' => 3500.00,
-            'image_url' => 'images/villa.png',
-            'lat' => 44.1333,
-            'lng' => 12.2333,
-            'sqm' => 220,
-            'beds' => 4,
-            'baths' => 3
-        ],
-        [
-            'name' => 'Trilocale Città Studi',
-            'type' => 'Appartamento',
-            'status' => 'available',
-            'location' => 'Milano, Città Studi',
-            'rooms' => 3,
-            'monthly_price' => 1600.00,
-            'image_url' => 'images/trilocale.png',
-            'lat' => 45.4773,
-            'lng' => 9.2276,
-            'sqm' => 95,
-            'beds' => 2,
-            'baths' => 1
-        ],
-        [
-            'name' => 'Monolocale Moderno',
-            'type' => 'Monolocale',
-            'status' => 'available',
-            'location' => 'Roma, Garbatella',
-            'rooms' => 1,
-            'monthly_price' => 850.00,
-            'image_url' => 'images/monolocale.png',
-            'lat' => 41.8603,
-            'lng' => 12.4800,
-            'sqm' => 40,
-            'beds' => 1,
-            'baths' => 1
-        ],
-        [
-            'name' => 'Antico Casale in Mattoni',
-            'type' => 'Casale',
-            'status' => 'available',
-            'location' => 'Napoli, Vomero',
-            'rooms' => 6,
-            'monthly_price' => 2500.00,
-            'image_url' => 'images/dimorastorica.png',
-            'lat' => 40.8446,
-            'lng' => 14.2343,
-            'sqm' => 180,
-            'beds' => 4,
-            'baths' => 2
-        ],
-        [
-            'name' => 'Villa Familiare',
-            'type' => 'Villa',
-            'status' => 'available',
-            'location' => 'Firenze, Fiesole',
-            'rooms' => 5,
-            'monthly_price' => 2800.00,
-            'image_url' => 'images/villa.png',
-            'lat' => 43.8066,
-            'lng' => 11.2917,
-            'sqm' => 280,
-            'beds' => 5,
-            'baths' => 4
-        ]
-    ];
+    $properties = [];
 
-    // --- Rentals Data ---
-    $rentals = [
-        [
-            'email' => 'alex@tenant.com',
-            'property_name' => 'Luxury Penthouse',
-            'start' => '2025-01-01',
-            'months' => 12
-        ]
-    ];
-
-    // --- Insert Properties ---
     $selectPropStmt = mysqli_prepare($conn, "SELECT id FROM properties WHERE name = ?");
     $insertPropStmt = mysqli_prepare($conn, "INSERT INTO properties (name, type, status, location, rooms, monthly_price, image_url, lat, lng, sqm, beds, baths) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
@@ -336,11 +236,11 @@ if ($shouldRun && $schemaReady) {
         $exists = $result ? mysqli_fetch_assoc($result) : null;
 
         if ($exists) {
-            // Update existing property
+
             $updatePropStmt = mysqli_prepare($conn, "UPDATE properties SET type=?, status=?, location=?, rooms=?, monthly_price=?, image_url=?, lat=?, lng=?, sqm=?, beds=?, baths=? WHERE name=?");
             mysqli_stmt_bind_param($updatePropStmt, "sssidsddiiis", $p['type'], $p['status'], $p['location'], $p['rooms'], $p['monthly_price'], $p['image_url'], $p['lat'], $p['lng'], $p['sqm'], $p['beds'], $p['baths'], $p['name']);
             mysqli_stmt_execute($updatePropStmt);
-            $report['properties_added']++; // Count as processed
+            $report['properties_added']++;
             continue;
         }
 
@@ -371,17 +271,9 @@ if ($shouldRun && $schemaReady) {
     mysqli_stmt_close($insertPropStmt);
 
 
-    // --- Rentals Data ---
-    $rentals = [
-        [
-            'email' => 'alex@tenant.com',
-            'property_name' => 'Luxury Penthouse',
-            'start' => '2025-01-01',
-            'months' => 12
-        ]
-    ];
+    $rentals = [];
 
-    // --- Insert Rentals ---
+
     $lookupRentalStmt = mysqli_prepare($conn, "SELECT u.id AS user_id, p.id AS property_id, p.monthly_price FROM users u CROSS JOIN properties p WHERE u.email = ? AND p.name = ? LIMIT 1");
     $checkRentalStmt = mysqli_prepare($conn, "SELECT id FROM rentals WHERE user_id = ? AND property_id = ? AND start_date = ? LIMIT 1");
     $insertRentalStmt = mysqli_prepare($conn, "INSERT INTO rentals (user_id, property_id, start_date, end_date, months, total_cost) VALUES (?, ?, ?, ?, ?, ?)");
@@ -411,7 +303,7 @@ if ($shouldRun && $schemaReady) {
             continue;
         }
 
-        // Calculate end date
+
         $startDt = new DateTime($start);
         $endDt = clone $startDt;
         $endDt->modify("+$months months");
@@ -474,9 +366,9 @@ include '../includes/header.php';
                     <li>Rentals skipped (missing data): <?php echo (int) $report['rentals_missing']; ?></li>
                 </ul>
                 <div class="mt-3">
-                    <a href="../index.php" class="btn btn-outline-primary">Go to Home</a>
+                        <a href="../index.php" class="btn btn-outline-primary">Go to Home</a>
+                    </div>
                 </div>
-            </div>
         <?php endif; ?>
     </div>
 </main>

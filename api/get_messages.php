@@ -1,9 +1,14 @@
-<?php
+﻿<?php
+include '../includes/functions.php';
 include '../db/db_config.php';
-session_start();
+
+if (session_status() === PHP_SESSION_NONE) {
+    sec_session_start();
+}
 
 if (!isset($_SESSION['user_id'])) {
-    exit; // Silent fail
+    echo '<div class="text-center text-muted">Not logged in</div>';
+    exit;
 }
 
 $currentUserId = $_SESSION['user_id'];
@@ -11,36 +16,64 @@ $otherUserId = isset($_GET['user_id']) ? (int) $_GET['user_id'] : 0;
 $rentalId = isset($_GET['rental_id']) ? (int) $_GET['rental_id'] : 0;
 
 if ($otherUserId) {
-    // User-to-User (Admin-User) Chat
-    $query = "SELECT m.*, u.name as sender_name, u.role as sender_role 
+    
+    $query = "SELECT m.*, 
+              (SELECT name FROM users WHERE id = m.sender_id LIMIT 1) as sender_name,
+              (SELECT role FROM users WHERE id = m.sender_id LIMIT 1) as sender_role
               FROM messages m 
-              JOIN users u ON m.sender_id = u.id 
               WHERE (m.sender_id = $currentUserId AND m.receiver_id = $otherUserId)
                  OR (m.sender_id = $otherUserId AND m.receiver_id = $currentUserId)
               ORDER BY m.created_at ASC";
 } elseif ($rentalId) {
-    // Legacy Rental Chat
-    $query = "SELECT m.*, u.name as sender_name, u.role as sender_role 
+    
+    $query = "SELECT m.*,
+              (SELECT name FROM users WHERE id = m.sender_id LIMIT 1) as sender_name,
+              (SELECT role FROM users WHERE id = m.sender_id LIMIT 1) as sender_role
               FROM messages m 
-              JOIN users u ON m.sender_id = u.id 
               WHERE m.rental_id = $rentalId 
               ORDER BY m.created_at ASC";
 } else {
+    
+    $adminQ = mysqli_query($conn, "SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+    if ($adminRow = mysqli_fetch_assoc($adminQ)) {
+        $otherUserId = $adminRow['id'];
+        $query = "SELECT m.*,
+                  (SELECT name FROM users WHERE id = m.sender_id LIMIT 1) as sender_name,
+                  (SELECT role FROM users WHERE id = m.sender_id LIMIT 1) as sender_role
+                  FROM messages m 
+                  WHERE (m.sender_id = $currentUserId AND m.receiver_id = $otherUserId)
+                     OR (m.sender_id = $otherUserId AND m.receiver_id = $currentUserId)
+                  ORDER BY m.created_at ASC";
+    } else {
+        echo '<div class="text-center text-muted">No admin found</div>';
+        exit;
+    }
+}
+
+$res = mysqli_query($conn, $query);
+
+if (!$res) {
+    echo '<div class="text-center text-danger">Error loading messages: ' . htmlspecialchars(mysqli_error($conn)) . '</div>';
     exit;
 }
-$res = mysqli_query($conn, $query);
+
+if (mysqli_num_rows($res) == 0) {
+    echo '<div class="text-center text-muted">No messages yet. Start the conversation!</div>';
+    exit;
+}
 
 while ($row = mysqli_fetch_assoc($res)) {
     $isMe = ($row['sender_id'] == $currentUserId);
     $align = $isMe ? 'text-end' : 'text-start';
-    $bg = $isMe ? 'bg-chat-me' : 'bg-white border';
-    $radius = $isMe ? 'rounded-top-left-3 rounded-bottom-3' : 'rounded-top-right-3 rounded-bottom-3';
+    $bg = $isMe ? 'bg-primary text-white' : 'bg-light border';
+
+    $senderName = $row['sender_name'] ?? 'Unknown';
 
     echo "<div class='mb-2 $align'>";
-    echo "<div class='d-inline-block p-2 px-3 rounded-4 $bg' style='max-width: 80%;'>";
-    echo "<div class='small fw-bold mb-1'>" . htmlspecialchars($row['sender_name']) . "</div>";
+    echo "<div class='d-inline-block p-2 px-3 rounded-3 $bg' style='max-width: 80%;'>";
+    echo "<div class='small fw-bold mb-1'>" . htmlspecialchars($senderName) . "</div>";
     echo "<div>" . nl2br(htmlspecialchars($row['message'])) . "</div>";
-    echo "<div class='small text-end mt-1 text-white' style='font-size: 0.7em;'>" . date('H:i', strtotime($row['created_at'])) . "</div>";
+    echo "<div class='small mt-1 opacity-75' style='font-size: 0.75em;'>" . date('H:i', strtotime($row['created_at'])) . "</div>";
     echo "</div>";
     echo "</div>";
 }

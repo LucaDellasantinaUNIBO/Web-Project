@@ -1,5 +1,5 @@
-<?php
-/** @var mysqli $conn */
+﻿<?php
+
 include 'db/db_config.php';
 include 'includes/auth.php';
 
@@ -86,20 +86,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$errors) {
         $errors[] = 'Enter lease duration in months.';
     }
 
-    // Validate Start Date
     $startDate = DateTime::createFromFormat('Y-m-d', $startDateInput);
     if (!$startDate) {
         $errors[] = 'Invalid start date.';
     }
 
-    // Check if user has card saved
     if (empty($userCardNumber)) {
         $_SESSION['profile_flash'] = ['type' => 'warning', 'message' => 'Please add your card details before making a rental.'];
         header('Location: profile.php');
         exit;
     }
-
-
 
     if ($property) {
         $estimatedCost = round((float) $property['monthly_price'] * $months, 2);
@@ -139,18 +135,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$errors) {
             mysqli_stmt_close($transactionStmt);
         }
 
-        $updateOk = true; // We don't update property status yet
-        // if ($insertOk) {
-        //     $stmt = mysqli_prepare($conn, "UPDATE properties SET status = 'rented' WHERE id = ?");
-        //     mysqli_stmt_bind_param($stmt, "i", $propertyId);
-        //     $updateOk = mysqli_stmt_execute($stmt);
-        //     mysqli_stmt_close($stmt);
-        // }
+        $updateOk = true;
 
         if ($insertOk && $updateOk && $walletUpdateOk && $transactionOk) {
             mysqli_commit($conn);
             $success = 'Rental request sent! Waiting for admin approval.';
-            $property['status'] = 'available'; // Still available until approved
+            $property['status'] = 'available';
             $userCredit -= $cost;
         } else {
             mysqli_rollback($conn);
@@ -275,7 +265,6 @@ include 'includes/header.php';
                         <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i> 24/7 Support</li>
                     </ul>
 
-                    <!-- Embedded Chat -->
                     <div class="mt-4 border-top pt-3">
                         <h3 class="h6 fw-bold mb-3">Need Help? Chat with Us</h3>
                         <div class="bg-white rounded-3 shadow-sm">
@@ -389,7 +378,6 @@ include 'includes/header.php';
         }
         updateEstimate();
 
-        // Card input formatting
         const cardNumberBooking = document.getElementById('card_number_booking');
         const cardExpiryBooking = document.getElementById('card_expiry_booking');
         const cardCvcBooking = document.getElementById('card_cvc_booking');
@@ -406,7 +394,7 @@ include 'includes/header.php';
             cardExpiryBooking.addEventListener('input', function (e) {
                 let value = e.target.value.replace(/\D/g, '');
                 if (value.length >= 2) {
-                    // Validate month is between 01-12
+
                     let month = parseInt(value.slice(0, 2));
                     if (month > 12) {
                         value = '12' + value.slice(2);
@@ -426,59 +414,96 @@ include 'includes/header.php';
         }
     })();
 
-    // Booking Chat Functionality
     (function () {
         const chatForm = document.getElementById('booking-chat-form');
         const chatMessages = document.getElementById('booking-chat-messages');
 
-        if (!chatForm || !chatMessages) return;
+        if (!chatForm || !chatMessages) {
+            console.error('Chat elements not found');
+            return;
+        }
 
         let adminId = null;
 
-        // Load messages with admin user_id
         function loadBookingMessages() {
-            if (!adminId) return;
+            const url = adminId ? 'api/get_messages.php?user_id=' + adminId : 'api/get_messages.php';
 
-            fetch('api/get_messages.php?user_id=' + adminId)
+            fetch(url)
                 .then(res => res.text())
                 .then(html => {
                     chatMessages.innerHTML = html || '<div class="text-center text-muted">No messages yet. Start the conversation!</div>';
                     chatMessages.scrollTop = chatMessages.scrollHeight;
+                })
+                .catch(err => {
+                    console.error('Error loading messages:', err);
+                    chatMessages.innerHTML = '<div class="text-center text-danger">Error loading messages</div>';
                 });
         }
 
-        // Send message
         chatForm.addEventListener('submit', function (e) {
             e.preventDefault();
             const message = this.message.value.trim();
 
-            if (!message || !adminId) return;
+            if (!message) {
+                console.log('Empty message, not sending');
+                return;
+            }
 
-            // Send message to admin
+            console.log('Sending message:', message);
+
+            let body = 'message=' + encodeURIComponent(message);
+            if (adminId) {
+                body += '&receiver_id=' + adminId;
+                console.log('Sending to admin ID:', adminId);
+            } else {
+                console.log('No adminId, server will default to admin');
+            }
+
             fetch('api/send_message.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'message=' + encodeURIComponent(message) + '&receiver_id=' + adminId
+                body: body
             })
-                .then(res => res.json())
+                .then(res => {
+                    console.log('Response status:', res.status);
+                    return res.json();
+                })
                 .then(data => {
+                    console.log('Response data:', data);
                     if (data.success) {
                         chatForm.message.value = '';
                         loadBookingMessages();
+                        console.log('Message sent successfully');
+                    } else {
+                        console.error('Server returned success=false:', data);
+                        alert('Errore nell\'invio del messaggio. Controlla la console.');
                     }
                 })
-                .catch(err => console.error('Error sending message:', err));
+                .catch(err => {
+                    console.error('Error sending message:', err);
+                    alert('Errore di rete nell\'invio del messaggio. Controlla la console.');
+                });
         });
 
-        // Get admin ID and start chat
+        
         fetch('api/get_admin_id.php')
             .then(res => res.json())
             .then(data => {
                 if (data.admin_id) {
                     adminId = data.admin_id;
+                    console.log('Admin ID loaded:', adminId);
                     loadBookingMessages();
                     setInterval(loadBookingMessages, 5000);
+                } else {
+                    console.warn('No admin_id in response:', data);
+                    
+                    loadBookingMessages();
                 }
+            })
+            .catch(err => {
+                console.error('Error fetching admin ID:', err);
+                
+                loadBookingMessages();
             });
     })();
 </script>
