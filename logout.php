@@ -1,5 +1,5 @@
 ﻿<?php
-include 'includes/functions.php';
+include 'includes/auth.php';
 sec_session_start();
 
 $_SESSION = array();

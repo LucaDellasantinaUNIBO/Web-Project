@@ -147,6 +147,14 @@ if ($shouldRun && $schemaReady) {
             $colsAdded++;
 
 
+        if (check_and_add_column($conn, 'users', 'first_name', 'VARCHAR(50) NOT NULL DEFAULT ""'))
+            $colsAdded++;
+        if (check_and_add_column($conn, 'users', 'last_name', 'VARCHAR(50) NOT NULL DEFAULT ""'))
+            $colsAdded++;
+        if (check_and_add_column($conn, 'users', 'salt', 'VARCHAR(128) NOT NULL DEFAULT ""'))
+            $colsAdded++;
+
+
         if (check_and_add_column($conn, 'users', 'mock_card_number', 'VARCHAR(20) DEFAULT NULL'))
             $colsAdded++;
         if (check_and_add_column($conn, 'users', 'mock_cvc', 'VARCHAR(5) DEFAULT NULL'))
@@ -189,8 +197,14 @@ if ($shouldRun && $schemaReady) {
 
 
     $selectUserStmt = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ?");
+    if (!$selectUserStmt) {
+        die("Prepare failed (selectUserStmt): " . mysqli_error($conn));
+    }
 
     $insertUserStmt = mysqli_prepare($conn, "INSERT INTO users (first_name, last_name, name, email, password, salt, role, status, credit, mock_card_number, mock_cvc, mock_expiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    if (!$insertUserStmt) {
+        die("Prepare failed (insertUserStmt): " . mysqli_error($conn));
+    }
 
     foreach ($users as $user) {
         mysqli_stmt_bind_param($selectUserStmt, "s", $user['email']);
@@ -208,6 +222,9 @@ if ($shouldRun && $schemaReady) {
         if ($exists) {
 
             $updateUserStmt = mysqli_prepare($conn, "UPDATE users SET first_name=?, last_name=?, name=?, password=?, salt=?, role=?, status=?, credit=?, mock_card_number=?, mock_cvc=?, mock_expiry=? WHERE email=?");
+            if (!$updateUserStmt) {
+                die("Prepare failed (updateUserStmt): " . mysqli_error($conn));
+            }
             $status = $user['status'] ?? 'active';
             mysqli_stmt_bind_param($updateUserStmt, "ssssssssdsss", $user['first_name'], $user['last_name'], $fullName, $password, $salt, $user['role'], $status, $user['credit'], $cardNum, $cardCvc, $cardExp, $user['email']);
             mysqli_stmt_execute($updateUserStmt);

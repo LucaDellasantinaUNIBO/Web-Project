@@ -261,7 +261,7 @@ include 'includes/header.php';
 
         <div class="row">
             <?php if (!$isAdmin): ?>
-                <?php include 'includes/user_sidebar.php'; ?>
+                <?php render_user_sidebar(); ?>
             <?php endif; ?>
 
             <div class="<?php echo $isAdmin ? 'col-12' : 'col-lg-9'; ?>">
@@ -279,7 +279,7 @@ include 'includes/header.php';
 
                     <?php if (isset($_GET['no_card'])): ?>
                         <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <span class="fas fa-exclamation-triangle me-2"></span>
                             Please add your card details below to recharge your wallet.
                         </div>
                     <?php endif; ?>
@@ -290,14 +290,14 @@ include 'includes/header.php';
                             <div class="col-md-6">
                                 <label class="form-label text-muted small fw-bold">Full Name</label>
                                 <div class="p-3 bg-light rounded-3 border-0">
-                                    <i class="far fa-user text-muted me-2"></i>
+                                    <span class="far fa-user text-muted me-2"></span>
                                     <?php echo htmlspecialchars($user['name'] ?? $_SESSION['user_name']); ?>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label text-muted small fw-bold">Email Address</label>
                                 <div class="p-3 bg-light rounded-3 border-0">
-                                    <i class="far fa-envelope text-muted me-2"></i>
+                                    <span class="far fa-envelope text-muted me-2"></span>
                                     <?php echo htmlspecialchars($user['email'] ?? ''); ?>
                                 </div>
                             </div>
@@ -341,8 +341,8 @@ include 'includes/header.php';
                             <?php endif; ?>
                         </div>
                         <div class="text-end mt-4">
-                            <button type="submit" class="btn btn-success text-white px-4 rounded-3"><i
-                                    class="fas fa-pen me-2"></i> Save Changes</button>
+                            <button type="submit" class="btn btn-success text-white px-4 rounded-3"><span
+                                    class="fas fa-pen me-2"></span> Save Changes</button>
                         </div>
                         
                         <?php if (!$isAdmin): ?>

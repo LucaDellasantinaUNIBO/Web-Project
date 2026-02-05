@@ -639,7 +639,7 @@ $revenueGrowth = 0;
 include 'includes/header.php';
 ?>
 <div class="d-flex" id="wrapper">
-    <?php include 'includes/admin_sidebar.php'; ?>
+    <?php render_admin_sidebar(); ?>
 
     <main id="page-content-wrapper" class="bg-light w-100">
         <div class="container-fluid px-4 py-5">

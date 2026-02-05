@@ -63,7 +63,7 @@ include 'includes/header.php';
         <h1 class="display-6 fw-bold text-dark mb-4">Settings</h1>
 
         <div class="row">
-            <?php include 'includes/user_sidebar.php'; ?>
+            <?php render_user_sidebar(); ?>
 
             <div class="col-lg-9">
                 <div class="bg-white rounded-4 shadow-sm p-4 p-lg-5">

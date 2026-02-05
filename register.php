@@ -1,6 +1,6 @@
 ﻿<?php
 
-include 'includes/functions.php';
+include 'includes/auth.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     sec_session_start();

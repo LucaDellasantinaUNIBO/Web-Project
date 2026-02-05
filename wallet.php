@@ -161,7 +161,7 @@ include 'includes/header.php';
         <h1 class="display-6 fw-bold text-dark mb-4">Wallet</h1>
 
         <div class="row">
-            <?php include 'includes/user_sidebar.php'; ?>
+            <?php render_user_sidebar(); ?>
 
             <div class="col-lg-9">
                 <?php if ($success): ?>

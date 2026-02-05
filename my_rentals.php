@@ -61,7 +61,7 @@ include 'includes/header.php';
         <h1 class="display-6 fw-bold text-dark mb-4">My Rentals</h1>
 
         <div class="row">
-            <?php include 'includes/user_sidebar.php'; ?>
+            <?php render_user_sidebar(); ?>
 
             <div class="col-lg-9">
                 <?php if (empty($pendingRentals) && empty($activeRentals)): ?>
@@ -80,7 +80,7 @@ include 'includes/header.php';
                         <h2 class="h4 mb-3 text-warning"><i class="fas fa-clock me-2"></i>Pending Requests</h2>
                         <div class="d-flex flex-column gap-3 mb-5">
                             <?php foreach ($pendingRentals as $rental): ?>
-                                <?php include 'includes/rental_card.php'; ?>
+                                <?php render_rental_card($rental); ?>
                             <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
@@ -90,7 +90,7 @@ include 'includes/header.php';
                         <h2 class="h4 mb-3 text-success"><i class="fas fa-check-circle me-2"></i>My Rentals</h2>
                         <div class="d-flex flex-column gap-3">
                             <?php foreach ($activeRentals as $rental): ?>
-                                <?php include 'includes/rental_card.php'; ?>
+                                <?php render_rental_card($rental); ?>
                             <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
