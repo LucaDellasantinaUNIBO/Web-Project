@@ -127,9 +127,7 @@ if ($shouldRun && $schemaReady) {
 if ($shouldRun && $schemaReady) {
     function get_auth_data($password)
     {
-        $salt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
-        $password = hash('sha512', $password . $salt);
-        return ['password' => $password, 'salt' => $salt];
+        return ['password' => password_hash($password, PASSWORD_DEFAULT)];
     }
 
     // 2.5 Ensure Schema Updates (Add columns if missing)
@@ -139,7 +137,11 @@ if ($shouldRun && $schemaReady) {
             $colsAdded++;
         if (check_and_add_column($conn, 'properties', 'lng', 'DECIMAL(11, 8) DEFAULT NULL'))
             $colsAdded++;
-        if (check_and_add_column($conn, 'properties', 'sqft', 'INT DEFAULT NULL'))
+        if (check_and_add_column($conn, 'properties', 'sqm', 'INT DEFAULT NULL'))
+            $colsAdded++;
+        if (check_and_add_column($conn, 'properties', 'beds', 'TINYINT DEFAULT 1'))
+            $colsAdded++;
+        if (check_and_add_column($conn, 'properties', 'baths', 'TINYINT DEFAULT 1'))
             $colsAdded++;
 
         // Mock Card Columns
@@ -163,9 +165,8 @@ if ($shouldRun && $schemaReady) {
         [
             'first_name' => 'Admin',
             'last_name' => 'User',
-            'email' => 'admin@housing.com',
+            'email' => 'admin@example.com',
             'password' => $adminAuth['password'],
-            'salt' => $adminAuth['salt'],
             'role' => 'admin',
             'credit' => 0.00,
             'card' => null
@@ -175,7 +176,6 @@ if ($shouldRun && $schemaReady) {
             'last_name' => 'Tenant',
             'email' => 'alex@tenant.com',
             'password' => $userAuth['password'],
-            'salt' => $userAuth['salt'],
             'role' => 'user',
             'credit' => 1500.00,
             'card' => ['4111 2222 3333 4444', '123', '12/30']
@@ -185,7 +185,6 @@ if ($shouldRun && $schemaReady) {
             'last_name' => 'Lee',
             'email' => 'maya@tenant.com',
             'password' => $userAuth['password'],
-            'salt' => $userAuth['salt'],
             'role' => 'user',
             'status' => 'active',
             'credit' => 500.00,
@@ -195,7 +194,7 @@ if ($shouldRun && $schemaReady) {
 
     // --- Insert Users ---
     $selectUserStmt = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ?");
-    $insertUserStmt = mysqli_prepare($conn, "INSERT INTO users (first_name, last_name, name, email, password, salt, role, status, credit, mock_card_number, mock_cvc, mock_expiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $insertUserStmt = mysqli_prepare($conn, "INSERT INTO users (first_name, last_name, name, email, password, role, status, credit, mock_card_number, mock_cvc, mock_expiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     foreach ($users as $user) {
         mysqli_stmt_bind_param($selectUserStmt, "s", $user['email']);
@@ -210,16 +209,16 @@ if ($shouldRun && $schemaReady) {
 
         if ($exists) {
             // Update existing user
-            $updateUserStmt = mysqli_prepare($conn, "UPDATE users SET first_name=?, last_name=?, name=?, password=?, salt=?, role=?, status=?, credit=?, mock_card_number=?, mock_cvc=?, mock_expiry=? WHERE email=?");
+            $updateUserStmt = mysqli_prepare($conn, "UPDATE users SET first_name=?, last_name=?, name=?, password=?, role=?, status=?, credit=?, mock_card_number=?, mock_cvc=?, mock_expiry=? WHERE email=?");
             $status = $user['status'] ?? 'active';
-            mysqli_stmt_bind_param($updateUserStmt, "sssssssdssss", $user['first_name'], $user['last_name'], $fullName, $user['password'], $user['salt'], $user['role'], $status, $user['credit'], $cardNum, $cardCvc, $cardExp, $user['email']);
+            mysqli_stmt_bind_param($updateUserStmt, "ssssssdssss", $user['first_name'], $user['last_name'], $fullName, $user['password'], $user['role'], $status, $user['credit'], $cardNum, $cardCvc, $cardExp, $user['email']);
             mysqli_stmt_execute($updateUserStmt);
             $report['users_added']++; // Count as processed
             continue;
         }
 
         $status = $user['status'] ?? 'active';
-        mysqli_stmt_bind_param($insertUserStmt, "ssssssssdsss", $user['first_name'], $user['last_name'], $fullName, $user['email'], $user['password'], $user['salt'], $user['role'], $status, $user['credit'], $cardNum, $cardCvc, $cardExp);
+        mysqli_stmt_bind_param($insertUserStmt, "sssssssdsss", $user['first_name'], $user['last_name'], $fullName, $user['email'], $user['password'], $user['role'], $status, $user['credit'], $cardNum, $cardCvc, $cardExp);
         if (mysqli_stmt_execute($insertUserStmt)) {
             $report['users_added']++;
         }
@@ -240,7 +239,9 @@ if ($shouldRun && $schemaReady) {
             'image_url' => 'images/trilocale.png',
             'lat' => 44.4949,
             'lng' => 11.3426,
-            'sqft' => 850
+            'sqm' => 85,
+            'beds' => 2,
+            'baths' => 1
         ],
         [
             'name' => 'Villa Esclusiva con Parco',
@@ -252,7 +253,9 @@ if ($shouldRun && $schemaReady) {
             'image_url' => 'images/villa.png',
             'lat' => 44.1333,
             'lng' => 12.2333,
-            'sqft' => 2200
+            'sqm' => 220,
+            'beds' => 4,
+            'baths' => 3
         ],
         [
             'name' => 'Trilocale Città Studi',
@@ -264,7 +267,9 @@ if ($shouldRun && $schemaReady) {
             'image_url' => 'images/trilocale.png',
             'lat' => 45.4773,
             'lng' => 9.2276,
-            'sqft' => 950
+            'sqm' => 95,
+            'beds' => 2,
+            'baths' => 1
         ],
         [
             'name' => 'Monolocale Moderno',
@@ -276,7 +281,9 @@ if ($shouldRun && $schemaReady) {
             'image_url' => 'images/monolocale.png',
             'lat' => 41.8603,
             'lng' => 12.4800,
-            'sqft' => 400
+            'sqm' => 40,
+            'beds' => 1,
+            'baths' => 1
         ],
         [
             'name' => 'Antico Casale in Mattoni',
@@ -288,7 +295,9 @@ if ($shouldRun && $schemaReady) {
             'image_url' => 'images/dimorastorica.png',
             'lat' => 40.8446,
             'lng' => 14.2343,
-            'sqft' => 1800
+            'sqm' => 180,
+            'beds' => 4,
+            'baths' => 2
         ],
         [
             'name' => 'Villa Familiare',
@@ -300,7 +309,9 @@ if ($shouldRun && $schemaReady) {
             'image_url' => 'images/villa.png',
             'lat' => 43.8066,
             'lng' => 11.2917,
-            'sqft' => 2800
+            'sqm' => 280,
+            'beds' => 5,
+            'baths' => 4
         ]
     ];
 
@@ -316,7 +327,7 @@ if ($shouldRun && $schemaReady) {
 
     // --- Insert Properties ---
     $selectPropStmt = mysqli_prepare($conn, "SELECT id FROM properties WHERE name = ?");
-    $insertPropStmt = mysqli_prepare($conn, "INSERT INTO properties (name, type, status, location, rooms, monthly_price, image_url, lat, lng, sqft) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $insertPropStmt = mysqli_prepare($conn, "INSERT INTO properties (name, type, status, location, rooms, monthly_price, image_url, lat, lng, sqm, beds, baths) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     foreach ($properties as $p) {
         mysqli_stmt_bind_param($selectPropStmt, "s", $p['name']);
@@ -326,16 +337,19 @@ if ($shouldRun && $schemaReady) {
 
         if ($exists) {
             // Update existing property
-            $updatePropStmt = mysqli_prepare($conn, "UPDATE properties SET type=?, status=?, location=?, rooms=?, monthly_price=?, image_url=?, lat=?, lng=?, sqft=? WHERE name=?");
-            mysqli_stmt_bind_param($updatePropStmt, "sssidsddis", $p['type'], $p['status'], $p['location'], $p['rooms'], $p['monthly_price'], $p['image_url'], $p['lat'], $p['lng'], $p['sqft'], $p['name']);
+            $updatePropStmt = mysqli_prepare($conn, "UPDATE properties SET type=?, status=?, location=?, rooms=?, monthly_price=?, image_url=?, lat=?, lng=?, sqm=?, beds=?, baths=? WHERE name=?");
+            mysqli_stmt_bind_param($updatePropStmt, "sssidsddiiis", $p['type'], $p['status'], $p['location'], $p['rooms'], $p['monthly_price'], $p['image_url'], $p['lat'], $p['lng'], $p['sqm'], $p['beds'], $p['baths'], $p['name']);
             mysqli_stmt_execute($updatePropStmt);
             $report['properties_added']++; // Count as processed
             continue;
         }
 
+        $beds = $p['beds'] ?? 1;
+        $baths = $p['baths'] ?? 1;
+
         mysqli_stmt_bind_param(
             $insertPropStmt,
-            "ssssidsddi",
+            "ssssidsddiii",
             $p['name'],
             $p['type'],
             $p['status'],
@@ -345,7 +359,9 @@ if ($shouldRun && $schemaReady) {
             $p['image_url'],
             $p['lat'],
             $p['lng'],
-            $p['sqft']
+            $p['sqm'],
+            $beds,
+            $baths
         );
         if (mysqli_stmt_execute($insertPropStmt)) {
             $report['properties_added']++;

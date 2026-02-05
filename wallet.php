@@ -20,12 +20,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $amountValue = (float) $amountInput;
     if ($amountInput === '' || $amountValue <= 0) {
         $errors[] = 'Enter a valid amount.';
-    } elseif ($amountValue < 50 || $amountValue > 5000) {
-        $errors[] = 'Amount must be between € 50 and € 5000.';
     }
 
     if ($cardholderInput === '' || strlen($cardholderInput) < 3) {
         $errors[] = 'Cardholder name is too short.';
+    }
+
+    // Check custom card validation against DB
+    if (empty($errors)) {
+        $stmt = mysqli_prepare($conn, "SELECT mock_card_number, mock_cvc, mock_expiry FROM users WHERE id = ?");
+        mysqli_stmt_bind_param($stmt, "i", $userId);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        $userCardData = mysqli_fetch_assoc($res);
+        mysqli_stmt_close($stmt);
+
+        $dbCard = $userCardData['mock_card_number'] ?? '';
+        $dbCvc = $userCardData['mock_cvc'] ?? '';
+        $dbExp = $userCardData['mock_expiry'] ?? '';
+
+        if ($cardNumberRaw !== $dbCard || $cvcRaw !== $dbCvc || $expiryInput !== $dbExp) {
+            $errors[] = 'Payment failed: Card details do not match our records.';
+        }
     }
 
     if (empty($errors)) {
@@ -60,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         if ($updateOk && $transactionOk) {
             mysqli_commit($conn);
-            $success = "Successfully added €" . number_format($amountValue, 2) . " to your wallet.";
+            $success = "Successfully added €" . number_format($amountValue, 2, ',', '.') . " to your wallet.";
         } else {
             mysqli_rollback($conn);
             $errors[] = "Failed to process transaction.";
@@ -69,14 +85,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 
-// Fetch user credit
+// Fetch user credit and card details
 $credit = 0.0;
-$stmt = mysqli_prepare($conn, "SELECT credit FROM users WHERE id = ?");
+$userCardNumber = '';
+$stmt = mysqli_prepare($conn, "SELECT credit, mock_card_number FROM users WHERE id = ?");
 mysqli_stmt_bind_param($stmt, "i", $userId);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 if ($row = mysqli_fetch_assoc($result)) {
     $credit = (float) $row['credit'];
+    $userCardNumber = $row['mock_card_number'] ?? '';
 }
 mysqli_stmt_close($stmt);
 
@@ -176,7 +194,7 @@ include 'includes/header.php';
                             <div class="position-relative z-1">
                                 <p class="mb-1 opacity-75">Total Balance Due</p>
                                 <h2 class="h3 fw-bold mb-1">
-                                    €<?php echo number_format(0, 2); // Hardcoded as per screenshot implies 'Due' or maybe it means Credit? Screenshot says 0.00 ?>
+                                    €<?php echo number_format(0, 2, ',', '.'); // Hardcoded as per screenshot implies 'Due' or maybe it means Credit? Screenshot says 0.00 ?>
                                 </h2>
                                 <p class="small mb-0"><i class="fas fa-check-circle me-1"></i> All payments up to date
                                 </p>
@@ -186,7 +204,7 @@ include 'includes/header.php';
                     <div class="col-md-4">
                         <div class="bg-white rounded-4 p-4 h-100 shadow-sm">
                             <p class="text-muted mb-1">Last Payment</p>
-                            <h2 class="h3 fw-bold mb-1">€<?php echo number_format($lastPayment, 2); ?></h2>
+                            <h2 class="h3 fw-bold mb-1">€<?php echo number_format($lastPayment, 2, ',', '.'); ?></h2>
                             <p class="text-muted small mb-0"><i class="far fa-clock me-1"></i>
                                 <?php echo $lastPaymentDate; ?></p>
                         </div>
@@ -194,10 +212,10 @@ include 'includes/header.php';
                     <div class="col-md-4">
                         <div class="bg-white rounded-4 p-4 h-100 shadow-sm">
                             <p class="text-muted mb-1">Total Paid (YTD)</p>
-                            <h2 class="h3 fw-bold mb-1">€<?php echo number_format($totalPaid, 2); ?></h2>
+                            <h2 class="h3 fw-bold mb-1">€<?php echo number_format($totalPaid, 2, ',', '.'); ?></h2>
                             <p
                                 class="<?php echo $spendingGrowth >= 0 ? 'text-success' : 'text-danger'; ?> small mb-0 fw-bold">
-                                <?php echo ($spendingGrowth >= 0 ? '+' : '') . number_format($spendingGrowth, 1); ?>%
+                                <?php echo ($spendingGrowth >= 0 ? '+' : '') . number_format($spendingGrowth, 1, ',', '.'); ?>%
                                 from last year
                             </p>
                         </div>
@@ -208,12 +226,27 @@ include 'includes/header.php';
                 <div class="bg-white rounded-4 shadow-sm p-4 mb-4 d-flex justify-content-between align-items-center">
                     <div>
                         <p class="text-muted mb-0">Available Wallet Credit</p>
-                        <h2 class="h3 fw-bold text-success mb-0">€<?php echo number_format($credit, 2); ?></h2>
+                        <h2 class="h3 fw-bold text-success mb-0">€<?php echo number_format($credit, 2, ',', '.'); ?>
+                        </h2>
                     </div>
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addFundsModal">
+                    <button class="btn btn-primary" id="addFundsBtn">
                         <i class="fas fa-plus me-2"></i> Add Funds
                     </button>
                 </div>
+
+                <script>
+                    document.getElementById('addFundsBtn').addEventListener('click', function () {
+                        var hasCard = <?php echo json_encode(!empty($userCardNumber)); ?>;
+                        if (!hasCard) {
+                            // Redirect to profile with message
+                            window.location.href = 'profile.php?no_card=1';
+                        } else {
+                            // Open modal
+                            var modal = new bootstrap.Modal(document.getElementById('addFundsModal'));
+                            modal.show();
+                        }
+                    });
+                </script>
 
                 <!-- History -->
                 <div class="bg-white rounded-4 shadow-sm p-4 mb-4">
@@ -249,7 +282,7 @@ include 'includes/header.php';
                                             </td>
                                             <td
                                                 class="text-end fw-bold <?php echo $t['type'] === 'topup' ? 'text-success' : ''; ?>">
-                                                <?php echo ($t['type'] === 'topup' ? '+' : '') . '€' . number_format($t['amount'], 2); ?>
+                                                <?php echo ($t['type'] === 'topup' ? '+' : '') . '€' . number_format($t['amount'], 2, ',', '.'); ?>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -280,7 +313,7 @@ include 'includes/header.php';
                             <div class="input-group">
                                 <span class="input-group-text bg-light border-end-0">€</span>
                                 <input type="number" name="amount" class="form-control border-start-0 ps-0"
-                                    placeholder="0.00" min="50" step="10" required>
+                                    placeholder="0.00" step="0.01" required>
                             </div>
                         </div>
 
@@ -288,22 +321,23 @@ include 'includes/header.php';
                             <label class="form-label fw-bold small text-muted">Card Details</label>
                             <div class="p-3 bg-light rounded-3 border">
                                 <div class="mb-3">
-                                    <input type="text" name="card_number" class="form-control bg-white"
-                                        placeholder="Card Number" value="4111 1111 1111 1111">
+                                    <input type="text" name="card_number" id="card_number_input"
+                                        class="form-control bg-white" placeholder="0000 0000 0000 0000" maxlength="19"
+                                        required>
                                 </div>
                                 <div class="row g-2">
                                     <div class="col-6">
                                         <input type="text" name="expiry" class="form-control bg-white"
-                                            placeholder="MM/YY" value="12/30">
+                                            placeholder="MM/YY" maxlength="5" required>
                                     </div>
                                     <div class="col-6">
                                         <input type="text" name="cvc" class="form-control bg-white" placeholder="CVC"
-                                            value="123">
+                                            maxlength="3" required>
                                     </div>
                                 </div>
                                 <div class="mt-3">
                                     <input type="text" name="cardholder" class="form-control bg-white"
-                                        placeholder="Cardholder Name" value="Alex Johnson">
+                                        placeholder="Cardholder Name" required>
                                 </div>
                             </div>
                             <div class="d-flex justify-content-between align-items-center mt-2">
@@ -317,6 +351,39 @@ include 'includes/header.php';
                             <button type="submit" class="btn btn-primary btn-lg rounded-3">Add Funds Now</button>
                         </div>
                     </form>
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function () {
+                            const cardInput = document.getElementById('card_number_input');
+                            if (cardInput) {
+                                cardInput.addEventListener('input', function (e) {
+                                    // Remove all non-digits
+                                    let value = e.target.value.replace(/\D/g, '');
+                                    // Add space every 4 digits
+                                    value = value.replace(/(\d{4})(?=\d)/g, '$1 ');
+                                    e.target.value = value;
+                                });
+                            }
+
+                            // Add expiry formatting
+                            const expiryInputs = document.querySelectorAll('input[name="expiry"]');
+                            expiryInputs.forEach(function (expiryInput) {
+                                expiryInput.addEventListener('input', function (e) {
+                                    let value = e.target.value.replace(/\D/g, '');
+                                    if (value.length >= 2) {
+                                        // Validate month is between 01-12
+                                        let month = parseInt(value.slice(0, 2));
+                                        if (month > 12) {
+                                            value = '12' + value.slice(2);
+                                        } else if (month === 0) {
+                                            value = '01' + value.slice(2);
+                                        }
+                                        value = value.slice(0, 2) + '/' + value.slice(2, 4);
+                                    }
+                                    e.target.value = value;
+                                });
+                            });
+                        });
+                    </script>
                 </div>
             </div>
         </div>

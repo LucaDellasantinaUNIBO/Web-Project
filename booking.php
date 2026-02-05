@@ -56,13 +56,19 @@ if (!$property) {
 }
 
 $userCredit = 0.00;
+$userCardNumber = '';
+$userCardCvc = '';
+$userCardExpiry = '';
 if (isset($_SESSION['user_id'])) {
-    $stmt = mysqli_prepare($conn, "SELECT credit FROM users WHERE id = ?");
+    $stmt = mysqli_prepare($conn, "SELECT credit, mock_card_number, mock_cvc, mock_expiry FROM users WHERE id = ?");
     mysqli_stmt_bind_param($stmt, "i", $_SESSION['user_id']);
     mysqli_stmt_execute($stmt);
     $result = mysqli_stmt_get_result($stmt);
     if ($row = mysqli_fetch_assoc($result)) {
         $userCredit = (float) $row['credit'];
+        $userCardNumber = $row['mock_card_number'] ?? '';
+        $userCardCvc = $row['mock_cvc'] ?? '';
+        $userCardExpiry = $row['mock_expiry'] ?? '';
     }
     mysqli_stmt_close($stmt);
 }
@@ -86,6 +92,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$errors) {
         $errors[] = 'Invalid start date.';
     }
 
+    // Check if user has card saved
+    if (empty($userCardNumber)) {
+        $_SESSION['profile_flash'] = ['type' => 'warning', 'message' => 'Please add your card details before making a rental.'];
+        header('Location: profile.php');
+        exit;
+    }
+
+
+
     if ($property) {
         $estimatedCost = round((float) $property['monthly_price'] * $months, 2);
         if ($userCredit < $estimatedCost) {
@@ -104,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$errors) {
 
         mysqli_begin_transaction($conn);
 
-        $stmt = mysqli_prepare($conn, "INSERT INTO rentals (user_id, property_id, start_date, end_date, months, total_cost) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt = mysqli_prepare($conn, "INSERT INTO rentals (user_id, property_id, start_date, end_date, months, total_cost, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
         mysqli_stmt_bind_param($stmt, "iisssd", $_SESSION['user_id'], $propertyId, $start, $end, $months, $cost);
         $insertOk = mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
@@ -118,24 +133,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$errors) {
         $transactionStmt = mysqli_prepare($conn, "INSERT INTO transactions (user_id, type, amount, balance_after, description) VALUES (?, 'rental', ?, ?, ?)");
         if ($transactionStmt) {
             $amount = 0 - $cost;
-            $description = "Rent for {$property['name']}.";
+            $description = "Rental Request for {$property['name']} (Pending Approval).";
             mysqli_stmt_bind_param($transactionStmt, "idds", $_SESSION['user_id'], $amount, $newBalance, $description);
             $transactionOk = mysqli_stmt_execute($transactionStmt);
             mysqli_stmt_close($transactionStmt);
         }
 
-        $updateOk = false;
-        if ($insertOk) {
-            $stmt = mysqli_prepare($conn, "UPDATE properties SET status = 'rented' WHERE id = ?");
-            mysqli_stmt_bind_param($stmt, "i", $propertyId);
-            $updateOk = mysqli_stmt_execute($stmt);
-            mysqli_stmt_close($stmt);
-        }
+        $updateOk = true; // We don't update property status yet
+        // if ($insertOk) {
+        //     $stmt = mysqli_prepare($conn, "UPDATE properties SET status = 'rented' WHERE id = ?");
+        //     mysqli_stmt_bind_param($stmt, "i", $propertyId);
+        //     $updateOk = mysqli_stmt_execute($stmt);
+        //     mysqli_stmt_close($stmt);
+        // }
 
         if ($insertOk && $updateOk && $walletUpdateOk && $transactionOk) {
             mysqli_commit($conn);
-            $success = 'Rental confirmed! You can see the summary in your profile.';
-            $property['status'] = 'rented';
+            $success = 'Rental request sent! Waiting for admin approval.';
+            $property['status'] = 'available'; // Still available until approved
             $userCredit -= $cost;
         } else {
             mysqli_rollback($conn);
@@ -219,8 +234,8 @@ include 'includes/header.php';
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label fw-bold" for="months-input">Duration (Months)</label>
-                                    <input id="months-input" type="number" min="1" max="60" name="months"
-                                        class="form-control" value="12" required>
+                                    <input id="months-input" type="number" min="1" name="months" class="form-control"
+                                        value="12" required>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="small text-muted">Total Cost</div>
@@ -233,10 +248,11 @@ include 'includes/header.php';
                                     <div class="fw-bold" id="end-estimate">--</div>
                                 </div>
                             </div>
+
                             <div class="mb-4 mt-3">
                                 <div class="small text-muted">Wallet balance</div>
                                 <div class="fw-bold">€
-                                    <?php echo number_format($userCredit, 2); ?>
+                                    <?php echo number_format($userCredit, 2, ',', '.'); ?>
                                 </div>
                                 <div class="small text-muted mt-1">Rent is charged upfront.</div>
                                 <div id="credit-warning" class="alert alert-warning mt-3 d-none">
@@ -244,8 +260,8 @@ include 'includes/header.php';
                                     <a class="alert-link" href="wallet.php">Open wallet</a>
                                 </div>
                             </div>
-                            <button id="confirm-booking" type="submit" class="btn btn-primary w-100 mt-2">Confirm
-                                Rental</button>
+                            <button id="confirm-booking" type="submit" class="btn btn-primary w-100 mt-2">Rent
+                                Request</button>
                         </form>
                     </div>
                 <?php endif; ?>
@@ -258,6 +274,29 @@ include 'includes/header.php';
                         <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i> Secure Payments</li>
                         <li class="mb-2"><i class="fas fa-check-circle text-success me-2"></i> 24/7 Support</li>
                     </ul>
+
+                    <!-- Embedded Chat -->
+                    <div class="mt-4 border-top pt-3">
+                        <h3 class="h6 fw-bold mb-3">Need Help? Chat with Us</h3>
+                        <div class="bg-white rounded-3 shadow-sm">
+                            <div id="booking-chat-messages" class="p-3 bg-light"
+                                style="height: 250px; overflow-y: auto; border-radius: 0.5rem 0.5rem 0 0;">
+                                <div class="text-center text-muted mt-5">Loading messages...</div>
+                            </div>
+                            <form id="booking-chat-form" class="p-3 border-top bg-white"
+                                style="border-radius: 0 0 0.5rem 0.5rem;">
+                                <div class="input-group">
+                                    <input type="text" name="message"
+                                        class="form-control border-0 bg-light rounded-start-pill ps-3"
+                                        placeholder="Type a message..." required>
+                                    <button class="btn btn-primary rounded-end-pill px-4" type="submit"
+                                        aria-label="Send message">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -349,6 +388,98 @@ include 'includes/header.php';
             });
         }
         updateEstimate();
+
+        // Card input formatting
+        const cardNumberBooking = document.getElementById('card_number_booking');
+        const cardExpiryBooking = document.getElementById('card_expiry_booking');
+        const cardCvcBooking = document.getElementById('card_cvc_booking');
+
+        if (cardNumberBooking) {
+            cardNumberBooking.addEventListener('input', function (e) {
+                let value = e.target.value.replace(/\s/g, '').replace(/\D/g, '');
+                let formatted = value.match(/.{1,4}/g)?.join(' ') || value;
+                e.target.value = formatted;
+            });
+        }
+
+        if (cardExpiryBooking) {
+            cardExpiryBooking.addEventListener('input', function (e) {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length >= 2) {
+                    // Validate month is between 01-12
+                    let month = parseInt(value.slice(0, 2));
+                    if (month > 12) {
+                        value = '12' + value.slice(2);
+                    } else if (month === 0) {
+                        value = '01' + value.slice(2);
+                    }
+                    value = value.slice(0, 2) + '/' + value.slice(2, 4);
+                }
+                e.target.value = value;
+            });
+        }
+
+        if (cardCvcBooking) {
+            cardCvcBooking.addEventListener('input', function (e) {
+                e.target.value = e.target.value.replace(/\D/g, '');
+            });
+        }
+    })();
+
+    // Booking Chat Functionality
+    (function () {
+        const chatForm = document.getElementById('booking-chat-form');
+        const chatMessages = document.getElementById('booking-chat-messages');
+
+        if (!chatForm || !chatMessages) return;
+
+        let adminId = null;
+
+        // Load messages with admin user_id
+        function loadBookingMessages() {
+            if (!adminId) return;
+
+            fetch('api/get_messages.php?user_id=' + adminId)
+                .then(res => res.text())
+                .then(html => {
+                    chatMessages.innerHTML = html || '<div class="text-center text-muted">No messages yet. Start the conversation!</div>';
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                });
+        }
+
+        // Send message
+        chatForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const message = this.message.value.trim();
+
+            if (!message || !adminId) return;
+
+            // Send message to admin
+            fetch('api/send_message.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'message=' + encodeURIComponent(message) + '&receiver_id=' + adminId
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        chatForm.message.value = '';
+                        loadBookingMessages();
+                    }
+                })
+                .catch(err => console.error('Error sending message:', err));
+        });
+
+        // Get admin ID and start chat
+        fetch('api/get_admin_id.php')
+            .then(res => res.json())
+            .then(data => {
+                if (data.admin_id) {
+                    adminId = data.admin_id;
+                    loadBookingMessages();
+                    setInterval(loadBookingMessages, 5000);
+                }
+            });
     })();
 </script>
 

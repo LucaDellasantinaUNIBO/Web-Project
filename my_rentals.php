@@ -6,11 +6,12 @@ include 'includes/auth.php';
 require_login();
 
 $userId = $_SESSION['user_id'];
-$rentals = [];
+$pendingRentals = [];
+$activeRentals = [];
 $now = date('Y-m-d');
 
 // Fetch all rentals with property details
-$stmt = mysqli_prepare($conn, "SELECT r.id, r.start_date, r.end_date, r.months, r.total_cost, p.name AS property_name, p.location, p.image_url, p.type AS property_type FROM rentals r JOIN properties p ON r.property_id = p.id WHERE r.user_id = ? ORDER BY r.start_date DESC");
+$stmt = mysqli_prepare($conn, "SELECT r.id, r.start_date, r.end_date, r.months, r.total_cost, r.status, p.name AS property_name, p.location, p.image_url, p.type AS property_type FROM rentals r JOIN properties p ON r.property_id = p.id WHERE r.user_id = ? ORDER BY r.start_date DESC");
 if ($stmt) {
     mysqli_stmt_bind_param($stmt, "i", $userId);
     mysqli_stmt_execute($stmt);
@@ -18,17 +19,32 @@ if ($stmt) {
     if ($result) {
         while ($row = mysqli_fetch_assoc($result)) {
             // Determine status
-            $status = 'Completed';
-            $statusClass = 'bg-light text-secondary';
+            $status = ucfirst($row['status']); // 'Pending', 'Approved', 'Rejected'
 
-            if ($row['end_date'] >= $now || is_null($row['end_date'])) {
-                $status = 'Active';
-                $statusClass = 'bg-light-success text-success';
+            $statusClass = 'bg-secondary text-white';
+            if ($row['status'] === 'approved') {
+                if ($row['end_date'] >= $now || is_null($row['end_date'])) {
+                    $status = 'Active';
+                    $statusClass = 'bg-success text-white';
+                } else {
+                    $status = 'Completed';
+                    $statusClass = 'bg-light text-secondary border';
+                }
+            } elseif ($row['status'] === 'pending') {
+                $status = 'Pending Approval';
+                $statusClass = 'bg-warning text-dark';
+            } elseif ($row['status'] === 'rejected') {
+                $statusClass = 'bg-danger text-white';
             }
 
-            $row['status'] = $status;
+            $row['display_status'] = $status;
             $row['status_class'] = $statusClass;
-            $rentals[] = $row;
+
+            if ($row['status'] === 'pending') {
+                $pendingRentals[] = $row;
+            } else {
+                $activeRentals[] = $row; // Includes active, completed, rejected
+            }
         }
     }
     mysqli_stmt_close($stmt);
@@ -44,7 +60,7 @@ include 'includes/header.php';
             <?php include 'includes/user_sidebar.php'; ?>
 
             <div class="col-lg-9">
-                <?php if (empty($rentals)): ?>
+                <?php if (empty($pendingRentals) && empty($activeRentals)): ?>
                     <div class="bg-white rounded-4 shadow-sm p-5 text-center">
                         <div class="mb-3">
                             <i class="fas fa-home fa-3x text-muted opacity-25"></i>
@@ -54,71 +70,101 @@ include 'includes/header.php';
                         <a href="index.php" class="btn btn-primary mt-2">Browse Properties</a>
                     </div>
                 <?php else: ?>
-                    <div class="d-flex flex-column gap-3">
-                        <?php foreach ($rentals as $rental): ?>
-                            <div class="bg-white rounded-4 shadow-sm p-0 overflow-hidden">
-                                <div class="row g-0">
-                                    <div class="col-md-4">
-                                        <div style="height: 100%; min-height: 200px; background-color: #f0f0f0;">
-                                            <?php if ($rental['image_url']): ?>
-                                                <img src="<?php echo htmlspecialchars($rental['image_url']); ?>"
-                                                    alt="<?php echo htmlspecialchars($rental['property_name']); ?>"
-                                                    class="w-100 h-100 object-fit-cover">
-                                            <?php else: ?>
-                                                <div class="d-flex align-items-center justify-content-center h-100 text-muted">
-                                                    <i class="fas fa-image fa-2x"></i>
-                                                </div>
-                                            <?php endif; ?>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-8">
-                                        <div class="p-4 d-flex flex-column h-100">
-                                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                                <div>
-                                                    <h3 class="h5 fw-bold mb-1">
-                                                        <?php echo htmlspecialchars($rental['property_name']); ?>
-                                                    </h3>
-                                                    <p class="text-muted small mb-0"><i class="fas fa-map-marker-alt me-1"></i>
-                                                        <?php echo htmlspecialchars($rental['location']); ?>
-                                                    </p>
-                                                </div>
-                                                <span
-                                                    class="badge <?php echo $rental['status_class']; ?> rounded-pill px-3 py-2 fw-medium">
-                                                    <?php echo $rental['status']; ?>
-                                                </span>
-                                            </div>
 
-                                            <div class="row mt-3 g-3">
-                                                <div class="col-6">
-                                                    <div class="text-muted small">Monthly Rent</div>
-                                                    <div class="fw-bold">
-                                                        €
-                                                        <?php echo number_format($rental['total_cost'] / max($rental['months'], 1), 2); ?>
-                                                    </div>
-                                                </div>
-                                                <div class="col-6">
-                                                    <div class="text-muted small">Next Payment</div>
-                                                    <div class="fw-bold">
-                                                        <?php echo $rental['status'] === 'Active' ? date('Y-m-d', strtotime('+1 month')) : '-'; ?>
-                                                    </div>
-                                                </div>
-                                            </div>
+                    <!-- Pending Requests Group -->
+                    <?php if (!empty($pendingRentals)): ?>
+                        <h2 class="h4 mb-3 text-warning"><i class="fas fa-clock me-2"></i>Pending Requests</h2>
+                        <div class="d-flex flex-column gap-3 mb-5">
+                            <?php foreach ($pendingRentals as $rental): ?>
+                                <?php include 'includes/rental_card.php'; ?>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
 
-                                            <div class="mt-auto pt-3 d-flex gap-2">
-                                                <button class="btn btn-outline-secondary btn-sm px-3">View Details</button>
-                                                <?php if ($rental['status'] === 'Active'): ?>
-                                                    <a href="wallet.php" class="btn btn-primary btn-sm px-3">Pay Rent</a>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
+                    <!-- Active/Past Rentals Group -->
+                    <?php if (!empty($activeRentals)): ?>
+                        <h2 class="h4 mb-3 text-success"><i class="fas fa-check-circle me-2"></i>My Rentals</h2>
+                        <div class="d-flex flex-column gap-3">
+                            <?php foreach ($activeRentals as $rental): ?>
+                                <?php include 'includes/rental_card.php'; ?>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+
                 <?php endif; ?>
             </div>
         </div>
     </div>
+</main>
+
+<!-- Chat Modal -->
+<div class="modal fade" id="chatModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 shadow-sm border-0">
+            <div class="modal-header border-bottom-0">
+                <h5 class="modal-title fw-bold">Contact Admin</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="chat-messages" class="p-3 bg-light" style="height: 300px; overflow-y: auto;">
+                    <!-- Messages loaded via AJAX -->
+                    <div class="text-center text-muted mt-5">Loading messages...</div>
+                </div>
+                <form id="chat-form" class="p-3 border-top">
+                    <input type="hidden" name="rental_id" id="chat-rental-id">
+                    <div class="input-group">
+                        <input type="text" name="message" class="form-control border-0 bg-light rounded-start-pill ps-3"
+                            placeholder="Type a message..." required>
+                        <button class="btn btn-primary rounded-end-pill px-4" type="submit">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chat Script -->
+<script>
+    const chatModal = document.getElementById('chatModal');
+    chatModal.addEventListener('show.bs.modal', function (event) {
+        const button = event.relatedTarget;
+        const rentalId = button.getAttribute('data-rental-id');
+        document.getElementById('chat-rental-id').value = rentalId;
+        loadMessages(rentalId);
+    });
+
+    document.getElementById('chat-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const rentalId = document.getElementById('chat-rental-id').value;
+        const msg = this.message.value;
+
+        // Simple fetch to send message
+        fetch('api/send_message.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'rental_id=' + rentalId + '&message=' + encodeURIComponent(msg)
+        }).then(res => res.json()).then(data => {
+            if (data.success) {
+                this.message.value = '';
+                loadMessages(rentalId);
+            }
+        });
+    });
+
+    function loadMessages(rentalId) {
+        fetch('api/get_messages.php?rental_id=' + rentalId)
+            .then(res => res.text())
+            .then(html => {
+                document.getElementById('chat-messages').innerHTML = html;
+                const container = document.getElementById('chat-messages');
+                container.scrollTop = container.scrollHeight;
+            });
+    }
+</script>
+</div>
+</div>
+</div>
 </main>
 <?php include 'includes/footer.php'; ?>

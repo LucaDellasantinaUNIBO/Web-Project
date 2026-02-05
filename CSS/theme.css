@@ -147,6 +147,10 @@ h6 {
     background-color: var(--primary) !important;
 }
 
+.text-primary-light {
+    color: var(--primary-light) !important;
+}
+
 /* Avatar styling */
 .avatar-placeholder {
     width: 80px;

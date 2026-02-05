@@ -2,17 +2,22 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+// Load dynamic site settings
+include_once __DIR__ . '/settings_loader.php';
+
 $isLoggedIn = isset($_SESSION['user_id']);
 $isAdmin = isset($_SESSION['user_role']) && strtolower((string) $_SESSION['user_role']) === 'admin';
 $userName = $isLoggedIn ? $_SESSION['user_name'] : '';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xml:lang="en" dir="ltr">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Housing Rentals</title>
+    <meta name="description" content="<?php echo htmlspecialchars($SITE_DESC); ?>">
+    <title><?php echo !empty($SITE_NAME) ? htmlspecialchars($SITE_NAME) : 'Housing Rentals'; ?> - Find Your Perfect Home
+    </title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -21,6 +26,7 @@ $userName = $isLoggedIn ? $_SESSION['user_name'] : '';
     <link rel="stylesheet" href="CSS/theme.css?v=<?php echo time(); ?>">
     <?php if (basename($_SERVER['PHP_SELF']) === 'admin.php'): ?>
         <link rel="stylesheet" href="CSS/admin.css?v=<?php echo time(); ?>">
+        <link rel="stylesheet" href="CSS/admin_users.css?v=<?php echo time(); ?>">
     <?php endif; ?>
     <link rel="stylesheet" href="CSS/style.css?v=<?php echo time(); ?>">
     <!-- Leaflet CSS -->
@@ -34,7 +40,7 @@ $userName = $isLoggedIn ? $_SESSION['user_name'] : '';
             position: absolute;
             top: -40px;
             left: 0;
-            background: #2E8B57;
+            background: var(--primary);
             /* changed to green for housing */
             color: white;
             padding: 8px;
@@ -54,10 +60,10 @@ $userName = $isLoggedIn ? $_SESSION['user_name'] : '';
         <div class="container">
             <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="index.php">
                 <div class="brand-icon d-flex justify-content-center align-items-center shadow-sm">
-                    <i class="fas fa-home text-white"></i>
+                    <span class="fas fa-home text-white" aria-hidden="true"></span>
                 </div>
-                <span class="tracking-tight" style="color: var(--foreground);">Housing<span
-                        class="text-primary">Rentals</span></span>
+                <span class="tracking-tight"
+                    style="color: var(--foreground);"><?php echo htmlspecialchars($SITE_NAME); ?></span>
             </a>
             <div class="ms-auto d-flex align-items-center gap-2">
                 <?php if ($isLoggedIn): ?>

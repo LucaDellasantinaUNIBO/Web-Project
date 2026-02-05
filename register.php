@@ -39,14 +39,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($exists) {
             $errors[] = 'Email already registered.';
         } else {
-            $salt = hash('sha512', uniqid(mt_rand(1, mt_getrandmax()), true));
-            $passwordHash = hash('sha512', $password . $salt);
-            // Combine for legacy 'name' column support until fully removed, or just use new cols
-            // We kept 'name' column, so let's fill it too for compatibility
             $fullName = $firstName . ' ' . $lastName;
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
-            $stmt = mysqli_prepare($conn, "INSERT INTO users (name, first_name, last_name, email, password, salt, role) VALUES (?, ?, ?, ?, ?, ?, 'user')");
-            mysqli_stmt_bind_param($stmt, "ssssss", $fullName, $firstName, $lastName, $email, $passwordHash, $salt);
+            $stmt = mysqli_prepare($conn, "INSERT INTO users (name, first_name, last_name, email, password, role) VALUES (?, ?, ?, ?, ?, 'user')");
+            mysqli_stmt_bind_param($stmt, "sssss", $fullName, $firstName, $lastName, $email, $passwordHash);
             $success = mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
 
@@ -82,11 +79,13 @@ include 'includes/header.php';
                 <div class="row mb-3">
                     <div class="col">
                         <label class="form-label fw-bold" for="reg-first">First Name</label>
-                        <input type="text" id="reg-first" name="first_name" class="form-control" autocomplete="given-name" required>
+                        <input type="text" id="reg-first" name="first_name" class="form-control"
+                            autocomplete="given-name" required>
                     </div>
                     <div class="col">
                         <label class="form-label fw-bold" for="reg-last">Last Name</label>
-                        <input type="text" id="reg-last" name="last_name" class="form-control" autocomplete="family-name" required>
+                        <input type="text" id="reg-last" name="last_name" class="form-control"
+                            autocomplete="family-name" required>
                     </div>
                 </div>
                 <div class="mb-3">

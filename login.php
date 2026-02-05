@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (!$errors) {
-        $stmt = mysqli_prepare($conn, "SELECT id, name, password, salt, role, status FROM users WHERE email = ?");
+        $stmt = mysqli_prepare($conn, "SELECT id, name, password, role, status FROM users WHERE email = ?");
         mysqli_stmt_bind_param($stmt, "s", $email);
         mysqli_stmt_execute($stmt);
         $result = mysqli_stmt_get_result($stmt);
@@ -41,8 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_stmt_close($stmt);
 
         if ($user) {
-            $check_password = hash('sha512', $password . $user['salt']);
-            if ($check_password === $user['password']) {
+            if (password_verify($password, $user['password'])) {
                 if (($user['status'] ?? 'active') === 'blocked') {
                     $errors[] = 'Your account has been blocked.';
                 } else {

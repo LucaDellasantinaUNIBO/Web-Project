@@ -23,6 +23,7 @@ $issueReports = [];
 $issueReportsError = null;
 $adminIssueErrors = [];
 $accountErrors = [];
+$profileErrors = [];
 
 function type_label(string $type): string
 {
@@ -72,6 +73,44 @@ if ($isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? ''
         } else {
             $adminIssueErrors[] = 'Issue update failed.';
         }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_profile') {
+    $phone = trim($_POST['phone'] ?? '');
+    $city = trim($_POST['city'] ?? '');
+    $cardNumber = str_replace(' ', '', trim($_POST['card_number'] ?? ''));
+    $cardCvc = trim($_POST['card_cvc'] ?? '');
+    $cardExpiry = trim($_POST['card_expiry'] ?? '');
+
+    if (strlen($phone) > 20) {
+        $profileErrors[] = 'Phone number is too long.';
+    }
+    if (strlen($city) > 100) {
+        $profileErrors[] = 'City name is too long.';
+    }
+    if ($cardNumber !== '' && !preg_match('/^\d{13,19}$/', $cardNumber)) {
+        $profileErrors[] = 'Invalid card number.';
+    }
+    if ($cardCvc !== '' && !preg_match('/^\d{3,4}$/', $cardCvc)) {
+        $profileErrors[] = 'Invalid CVV.';
+    }
+    if ($cardExpiry !== '' && !preg_match('/^\d{2}\/\d{2}$/', $cardExpiry)) {
+        $profileErrors[] = 'Invalid expiry (use MM/YY format).';
+    }
+
+    if (!$profileErrors) {
+        $stmt = mysqli_prepare($conn, "UPDATE users SET phone = ?, city = ?, mock_card_number = ?, mock_cvc = ?, mock_expiry = ? WHERE id = ?");
+        mysqli_stmt_bind_param($stmt, "sssssi", $phone, $city, $cardNumber, $cardCvc, $cardExpiry, $userId);
+        $ok = mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+
+        if ($ok) {
+            $_SESSION['profile_flash'] = ['type' => 'success', 'message' => 'Profile updated successfully.'];
+            header('Location: profile.php');
+            exit;
+        }
+        $profileErrors[] = 'Profile update failed.';
     }
 }
 
@@ -220,7 +259,7 @@ if (!$isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '
     }
 }
 
-$stmt = mysqli_prepare($conn, "SELECT name, email, credit FROM users WHERE id = ?");
+$stmt = mysqli_prepare($conn, "SELECT name, email, credit, phone, city, mock_card_number, mock_cvc, mock_expiry FROM users WHERE id = ?");
 mysqli_stmt_bind_param($stmt, "i", $userId);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
@@ -312,7 +351,23 @@ include 'includes/header.php';
                     <h2 class="h5 fw-bold mb-1">Personal Information</h2>
                     <p class="text-muted mb-4">Manage your personal details and contact preferences.</p>
 
-                    <form>
+                    <?php if ($profileErrors): ?>
+                        <div class="alert alert-danger">
+                            <?php foreach ($profileErrors as $error): ?>
+                                <div><?php echo htmlspecialchars($error); ?></div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (isset($_GET['no_card'])): ?>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Please add your card details below to recharge your wallet.
+                        </div>
+                    <?php endif; ?>
+
+                    <form method="post">
+                        <input type="hidden" name="action" value="update_profile">
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label text-muted small fw-bold">Full Name</label>
@@ -329,22 +384,73 @@ include 'includes/header.php';
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label text-muted small fw-bold">Phone Number</label>
-                                <div class="p-3 bg-light rounded-3 border-0">
-                                    <i class="fas fa-phone-alt text-muted me-2"></i> (555) 123-4567
-                                </div>
+                                <label class="form-label text-muted small fw-bold" for="phone">Phone Number</label>
+                                <input type="text" id="phone" name="phone" class="form-control" 
+                                    value="<?php echo htmlspecialchars($user['phone'] ?? ''); ?>" 
+                                    placeholder="Enter phone number">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label text-muted small fw-bold">Location</label>
-                                <div class="p-3 bg-light rounded-3 border-0">
-                                    <i class="fas fa-map-marker-alt text-muted me-2"></i> Los Angeles, CA
-                                </div>
+                                <label class="form-label text-muted small fw-bold" for="city">City</label>
+                                <input type="text" id="city" name="city" class="form-control" 
+                                    value="<?php echo htmlspecialchars($user['city'] ?? ''); ?>" 
+                                    placeholder="Enter city">
+                            </div>
+                            <div class="col-md-12">
+                                <hr class="my-3">
+                                <h3 class="h6 text-muted small fw-bold mb-3">Payment Information</h3>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label text-muted small fw-bold" for="card_number">Card Number</label>
+                                <input type="text" id="card_number" name="card_number" class="form-control" 
+                                    value="<?php echo htmlspecialchars($user['mock_card_number'] ?? ''); ?>" 
+                                    placeholder="1234 5678 9012 3456" maxlength="19">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label text-muted small fw-bold" for="card_expiry">Expiry (MM/YY)</label>
+                                <input type="text" id="card_expiry" name="card_expiry" class="form-control" 
+                                    value="<?php echo htmlspecialchars($user['mock_expiry'] ?? ''); ?>" 
+                                    placeholder="12/25" maxlength="5">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label text-muted small fw-bold" for="card_cvc">CVV</label>
+                                <input type="text" id="card_cvc" name="card_cvc" class="form-control" 
+                                    value="<?php echo htmlspecialchars($user['mock_cvc'] ?? ''); ?>" 
+                                    placeholder="123" maxlength="3">
                             </div>
                         </div>
                         <div class="text-end mt-4">
-                            <button type="button" class="btn btn-success text-white px-4 rounded-3"><i
+                            <button type="submit" class="btn btn-success text-white px-4 rounded-3"><i
                                     class="fas fa-pen me-2"></i> Save Changes</button>
                         </div>
+                        <script>
+                        // Auto-format card number with spaces every 4 digits
+                        document.getElementById('card_number').addEventListener('input', function(e) {
+                            let value = e.target.value.replace(/\s/g, '').replace(/\D/g, '');
+                            let formatted = value.match(/.{1,4}/g)?.join(' ') || value;
+                            e.target.value = formatted;
+                        });
+                        
+                        // Auto-format expiry date
+                        document.getElementById('card_expiry').addEventListener('input', function(e) {
+                            let value = e.target.value.replace(/\D/g, '');
+                            if (value.length >= 2) {
+                                // Validate month is between 01-12
+                                let month = parseInt(value.slice(0, 2));
+                                if (month > 12) {
+                                    value = '12' + value.slice(2);
+                                } else if (month === 0) {
+                                    value = '01' + value.slice(2);
+                                }
+                                value = value.slice(0, 2) + '/' + value.slice(2, 4);
+                            }
+                            e.target.value = value;
+                        });
+                        
+                        // Only allow digits in CVV
+                        document.getElementById('card_cvc').addEventListener('input', function(e) {
+                            e.target.value = e.target.value.replace(/\D/g, '');
+                        });
+                        </script>
                     </form>
                 </div>
 

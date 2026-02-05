@@ -14,15 +14,16 @@ CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     email VARCHAR(120) NOT NULL UNIQUE,
-    password CHAR(128) NOT NULL,
-    salt CHAR(128) NOT NULL,
+    password VARCHAR(255) NOT NULL,
     role ENUM('admin', 'user', 'landlord') DEFAULT 'user',
     status VARCHAR(20) DEFAULT 'active',
     credit DECIMAL(10, 2) DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     mock_card_number VARCHAR(20) DEFAULT NULL,
     mock_cvc VARCHAR(5) DEFAULT NULL,
-    mock_expiry VARCHAR(7) DEFAULT NULL
+    mock_expiry VARCHAR(7) DEFAULT NULL,
+    phone VARCHAR(20) DEFAULT NULL,
+    city VARCHAR(100) DEFAULT NULL
 );
 
 CREATE TABLE properties (
@@ -32,12 +33,14 @@ CREATE TABLE properties (
     status ENUM('available', 'rented', 'maintenance', 'renovation') NOT NULL DEFAULT 'available',
     location VARCHAR(255) NOT NULL,
     rooms TINYINT NOT NULL DEFAULT 1,
+    beds TINYINT NOT NULL DEFAULT 1,
+    baths TINYINT NOT NULL DEFAULT 1,
     monthly_price DECIMAL(8, 2) NOT NULL DEFAULT 500.00,
     image_url VARCHAR(255) DEFAULT NULL,
     description TEXT DEFAULT NULL,
     lat DECIMAL(10, 8) DEFAULT NULL,
     lng DECIMAL(11, 8) DEFAULT NULL,
-    sqft INT DEFAULT NULL
+    sqm INT DEFAULT NULL
 );
 
 CREATE TABLE rentals (
@@ -90,4 +93,15 @@ CREATE TABLE change_log (
     details TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (admin_id) REFERENCES users(id)
+);
+
+CREATE TABLE messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    rental_id INT NOT NULL,
+    sender_id INT NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (rental_id) REFERENCES rentals(id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_id) REFERENCES users(id)
 );

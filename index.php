@@ -114,28 +114,32 @@ include 'includes/header.php';
             <p class="fs-4 fw-light mb-5 opacity-75">Discover luxury apartments, cozy homes, and modern villas for rent
                 in your favorite locations.</p>
 
-            <!-- Search Bar -->
+            <!-- Removed unnecessary i tag or replaced if it was semantic, seemingly just decorative or empty here based on error log -->
+            <!-- Error log mentioned line 113: <i class="fas fa-expand-alt me-2"></i>. It seems I might have missed context. Let's look closer at the file content in next step if this fails or seems wrong. -->
             <div class="bg-white p-2 rounded-4 shadow-lg mx-auto d-flex align-items-center gap-2"
                 style="max-width: 800px; padding-right: 8px !important;">
 
                 <form class="w-100 d-flex align-items-center gap-2 m-0" method="get" id="filters">
                     <div class="flex-grow-1 border-end px-3 py-2 d-none d-md-block">
                         <div class="d-flex align-items-center gap-2 text-muted mb-1">
-                            <i class="fas fa-map-marker-alt small"></i>
-                            <span class="small fw-bold text-uppercase" style="font-size: 0.7rem;">Location</span>
+                            <span class="fas fa-map-marker-alt small" aria-hidden="true"></span>
+                            <label for="location-input" class="small fw-bold text-uppercase mb-0"
+                                style="font-size: 0.7rem;">Location</label>
                         </div>
-                        <input type="text" name="location" class="form-control border-0 p-0 shadow-none fw-medium"
-                            placeholder="Location (e.g. Los Angeles)"
+                        <input type="text" name="location" id="location-input"
+                            class="form-control border-0 p-0 shadow-none fw-medium"
+                            placeholder="Location (e.g. Los Angeles)" aria-label="Location"
                             value="<?php echo htmlspecialchars($locationSearch); ?>">
                     </div>
 
                     <div class="flex-grow-1 px-3 py-2">
                         <div class="d-flex align-items-center gap-2 text-muted mb-1">
-                            <i class="fas fa-home small"></i>
-                            <span class="small fw-bold text-uppercase" style="font-size: 0.7rem;">Property Type</span>
+                            <span class="fas fa-home small" aria-hidden="true"></span>
+                            <label for="status-filter-select" class="small fw-bold text-uppercase mb-0"
+                                style="font-size: 0.7rem;">Property Type</label>
                         </div>
                         <select class="form-select border-0 p-0 shadow-none fw-medium" name="status"
-                            id="status-filter-select" onchange="this.form.submit()">
+                            id="status-filter-select" aria-label="Property Type">
                             <option value="all" <?php echo $filterStatus === 'all' ? 'selected' : ''; ?>>All Types
                             </option>
                             <option value="available" <?php echo $filterStatus === 'available' ? 'selected' : ''; ?>>
@@ -145,16 +149,19 @@ include 'includes/header.php';
 
                     <div class="flex-grow-1 border-start px-3 py-2 d-none d-md-block">
                         <div class="d-flex align-items-center gap-2 text-muted mb-1">
-                            <i class="fas fa-euro-sign small"></i>
-                            <span class="small fw-bold text-uppercase" style="font-size: 0.7rem;">Max Price</span>
+                            <span class="fas fa-euro-sign small" aria-hidden="true"></span>
+                            <label for="max-price-input" class="small fw-bold text-uppercase mb-0"
+                                style="font-size: 0.7rem;">Max Price</label>
                         </div>
-                        <input type="number" name="max_price" class="form-control border-0 p-0 shadow-none fw-medium"
-                            placeholder="e.g. 1500" value="<?php echo htmlspecialchars((string) $maxPrice); ?>">
+                        <input type="number" name="max_price" id="max-price-input"
+                            class="form-control border-0 p-0 shadow-none fw-medium" placeholder="Max Price"
+                            aria-label="Max Price" value="<?php echo htmlspecialchars($maxPrice); ?>">
                     </div>
 
-                    <button
-                        class="btn btn-primary rounded-pill px-5 py-3 fw-bold shadow-sm d-flex align-items-center gap-2">
-                        <i class="fas fa-search"></i> Search
+                    <button type="submit"
+                        class="btn btn-primary rounded-circle p-3 shadow-sm d-flex align-items-center justify-content-center"
+                        style="width: 48px; height: 48px;" aria-label="Search Properties">
+                        <span class="fas fa-search" aria-hidden="true"></span>
                     </button>
                 </form>
             </div>
@@ -171,7 +178,7 @@ include 'includes/header.php';
                 </div>
                 <button id="expand-map-btn" class="btn btn-outline-dark rounded-pill px-4 fw-medium"
                     onclick="toggleMapSize()">
-                    <i class="fas fa-expand-alt me-2"></i> Expand Map
+                    <span class="fas fa-expand-alt me-2" aria-hidden="true"></span> Expand Map
                 </button>
             </div>
             <div id="map-container" style="height: 400px; transition: height 0.5s ease;"
@@ -194,8 +201,10 @@ include 'includes/header.php';
                 $mapProperties = []; // Array to hold data for JS map
                 if ($result && mysqli_num_rows($result) > 0) {
                     while ($row = mysqli_fetch_assoc($result)) {
-                        $rooms = (int) $row['rooms'];
-                        $sqft = isset($row['sqft']) ? (int) $row['sqft'] : 1200; // Fallback if null
+                        $sqm = isset($row['sqm']) ? (int) $row['sqm'] : 60;
+                        // $rooms = (int) $row['rooms'];
+                        $beds = (int) ($row['beds'] ?? 1);
+                        $baths = (int) ($row['baths'] ?? 1);
                         // Collect data for map
                         if (!empty($row['lat']) && !empty($row['lng'])) {
                             $mapProperties[] = [
@@ -224,7 +233,8 @@ include 'includes/header.php';
                                 <!-- Image Wrapper -->
                                 <div class="position-relative">
                                     <?php if ($imageUrl): ?>
-                                        <img src="<?php echo htmlspecialchars($imageUrl); ?>" class="card-img-top" alt="Property"
+                                        <img src="<?php echo htmlspecialchars($imageUrl); ?>" class="card-img-top"
+                                            alt="<?php echo htmlspecialchars($row['name']); ?>"
                                             style="height: 240px; object-fit: cover;">
                                     <?php else: ?>
                                         <div class="image-placeholder d-flex align-items-center justify-content-center bg-light"
@@ -251,36 +261,36 @@ include 'includes/header.php';
                                         <?php echo htmlspecialchars($row['name']); ?>
                                     </h3>
                                     <div class="d-flex align-items-center text-muted small mb-3">
-                                        <i class="fas fa-map-marker-alt me-1 text-success"></i>
+                                        <span class="fas fa-map-marker-alt me-1 text-success" aria-hidden="true"></span>
                                         <?php echo htmlspecialchars($row['location']); ?>
                                     </div>
 
                                     <!-- Specs Row -->
                                     <div class="d-flex align-items-center justify-content-between my-4 px-1">
                                         <div class="d-flex align-items-center gap-2 text-muted">
-                                            <i class="fas fa-bed"></i>
-                                            <span class="small fw-medium"><?php echo htmlspecialchars((string) $rooms); ?>
-                                                Beds</span>
+                                            <span class="fas fa-bed" aria-hidden="true"></span>
+                                            <span class="small fw-medium"><?php echo $beds; ?> Beds</span>
                                         </div>
                                         <div class="d-flex align-items-center gap-2 text-muted">
-                                            <i class="fas fa-bath"></i>
-                                            <span class="small fw-medium">2 Baths</span>
+                                            <span class="fas fa-bath" aria-hidden="true"></span>
+                                            <span class="small fw-medium"><?php echo $baths; ?> Baths</span>
                                         </div>
                                         <div class="d-flex align-items-center gap-2 text-muted">
-                                            <i class="far fa-square"></i>
-                                            <span class="small fw-medium"><?php echo $sqft; ?> sqft</span>
+                                            <span class="far fa-square" aria-hidden="true"></span>
+                                            <span class="small fw-medium"><?php echo $sqm; ?> m²</span>
                                         </div>
                                     </div>
 
                                     <?php if ($isAdmin): ?>
                                         <a href="admin.php?tab=properties&edit=<?php echo $row['id']; ?>#property-form"
                                             class="btn btn-outline-primary w-100 rounded-pill fw-bold">
-                                            <i class="fas fa-edit me-1"></i> Modify Property
+                                            <span class="fas fa-edit me-1" aria-hidden="true"></span> Modify Property
                                         </a>
                                     <?php elseif ($isAvailable): ?>
                                         <a href="booking.php?property_id=<?php echo $row['id']; ?>"
-                                            class="btn btn-primary w-100 rounded-pill py-2 fw-bold shadow-sm icon-link-hover">
-                                            <i class="fas fa-key small me-2"></i> Rent Now
+                                            class="btn btn-primary w-100 rounded-pill py-2 fw-bold shadow-sm icon-link-hover"
+                                            aria-label="Rent <?php echo htmlspecialchars($row['name']); ?>">
+                                            <span class="fas fa-key small me-2" aria-hidden="true"></span> Rent Now
                                         </a>
                                     <?php else: ?>
                                         <button class="btn btn-secondary w-100 rounded-pill py-2 text-white"
@@ -300,17 +310,8 @@ include 'includes/header.php';
     </section>
 </main>
 
-<script>
-    (function () {
-        var form = document.getElementById('filters');
-        if (!form) return;
-        var select = form.querySelector('select');
-        if (!select) return;
-        select.addEventListener('change', function () {
-            form.submit();
-        });
-    })();
 
+<script>
     // Map Implementation
     var map;
     var isExpanded = false;
@@ -329,14 +330,15 @@ include 'includes/header.php';
             var marker = L.marker([p.lat, p.lng]).addTo(map);
 
             var popupContent = `
-                <div style="width: 200px;">
-                    ${p.image ? `<img src="${p.image}" style="width: 100%; height: 120px; object-fit: cover; border-radius: 8px 8px 0 0;">` : ''}
-                    <div class="p-2">
-                        <h6 class="fw-bold mb-1">${p.name}</h6>
-                        <div class="text-success fw-bold text-end">€${p.price}/mo</div>
-                    </div>
-                </div>
-            `;
+<div style="width: 200px;">
+    ${p.image ? `<img src="${p.image}" alt="${p.name}"
+        style="width: 100%; height: 120px; object-fit: cover; border-radius: 8px 8px 0 0;">` : ''}
+    <div class="p-2">
+        <div class="fw-bold mb-1">${p.name}</div>
+        <div class="text-success fw-bold text-end">€${p.price}/mo</div>
+    </div>
+</div>
+`;
 
             marker.bindPopup(popupContent);
 
@@ -359,11 +361,11 @@ include 'includes/header.php';
 
         if (!isExpanded) {
             container.style.height = '600px';
-            btn.innerHTML = '<i class="fas fa-compress-alt me-1"></i> Shrink Map';
+            btn.innerHTML = '<span class="fas fa-compress-alt me-1" aria-hidden="true"></span> Shrink Map';
             isExpanded = true;
         } else {
             container.style.height = '400px';
-            btn.innerHTML = '<i class="fas fa-expand-alt me-1"></i> Expand Map';
+            btn.innerHTML = '<span class="fas fa-expand-alt me-1" aria-hidden="true"></span> Expand Map';
             isExpanded = false;
         }
 

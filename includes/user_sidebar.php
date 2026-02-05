@@ -11,9 +11,9 @@ $currentPage = basename($_SERVER['PHP_SELF']);
                     <i class="fas fa-user fa-3x text-secondary"></i>
                 </div>
             </div>
-            <h3 class="h5 fw-bold mb-1">
+            <h2 class="h5 fw-bold mb-1">
                 <?php echo htmlspecialchars($_SESSION['user_name'] ?? 'User'); ?>
-            </h3>
+            </h2>
             <p class="text-muted small mb-0">Member since
                 <?php echo date('F Y'); // In a real app, use created_at ?>
             </p>

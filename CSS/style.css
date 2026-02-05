@@ -64,3 +64,10 @@
     height: 400px;
     width: 100%;
 }
+
+/* Chat Bubble High Contrast */
+.bg-chat-me {
+    background-color: #0a58ca !important;
+    /* accessible dark blue */
+    color: white;
+}
