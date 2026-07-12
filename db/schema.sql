@@ -18,7 +18,6 @@ CREATE TABLE users (
     role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
     status ENUM('active', 'blocked') NOT NULL DEFAULT 'active',
     phone VARCHAR(30) DEFAULT NULL,
-    course VARCHAR(120) DEFAULT NULL,
     wallet_balance DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     card_holder VARCHAR(120) DEFAULT NULL,
     card_last4 CHAR(4) DEFAULT NULL,

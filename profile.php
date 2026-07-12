@@ -33,7 +33,6 @@ function request_status_meta(string $status): array
 if (!$isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_profile') {
     $name = trim($_POST['name'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
-    $course = trim($_POST['course'] ?? '');
     $password = $_POST['password'] ?? '';
     $confirm = $_POST['confirm'] ?? '';
 
@@ -49,15 +48,14 @@ if (!$isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '
 
     if (!$profileErrors) {
         $phoneValue = $phone === '' ? null : $phone;
-        $courseValue = $course === '' ? null : $course;
 
         if ($password !== '') {
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = mysqli_prepare($conn, "UPDATE users SET name = ?, phone = ?, course = ?, password = ? WHERE id = ?");
-            mysqli_stmt_bind_param($stmt, "ssssi", $name, $phoneValue, $courseValue, $passwordHash, $userId);
+            $stmt = mysqli_prepare($conn, "UPDATE users SET name = ?, phone = ?, password = ? WHERE id = ?");
+            mysqli_stmt_bind_param($stmt, "sssi", $name, $phoneValue, $passwordHash, $userId);
         } else {
-            $stmt = mysqli_prepare($conn, "UPDATE users SET name = ?, phone = ?, course = ? WHERE id = ?");
-            mysqli_stmt_bind_param($stmt, "sssi", $name, $phoneValue, $courseValue, $userId);
+            $stmt = mysqli_prepare($conn, "UPDATE users SET name = ?, phone = ? WHERE id = ?");
+            mysqli_stmt_bind_param($stmt, "ssi", $name, $phoneValue, $userId);
         }
         if (mysqli_stmt_execute($stmt)) {
             $_SESSION['user_name'] = $name;
@@ -168,7 +166,7 @@ if (!$isAdmin && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '
     }
 }
 
-$stmt = mysqli_prepare($conn, "SELECT name, email, phone, course, created_at FROM users WHERE id = ?");
+$stmt = mysqli_prepare($conn, "SELECT name, email, phone, created_at FROM users WHERE id = ?");
 mysqli_stmt_bind_param($stmt, "i", $userId);
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
@@ -251,9 +249,6 @@ include 'includes/header.php';
                 <div>
                     <h2 class="h4 fw-bold mb-0"><?php echo htmlspecialchars($user['name'] ?? ''); ?></h2>
                     <p class="text-muted mb-0"><?php echo htmlspecialchars($user['email'] ?? ''); ?></p>
-                    <?php if (!empty($user['course'])): ?>
-                        <span class="badge badge-soft mt-1"><?php echo htmlspecialchars($user['course']); ?></span>
-                    <?php endif; ?>
                 </div>
             </div>
             <div class="text-end">
@@ -365,10 +360,6 @@ include 'includes/header.php';
                 <div class="col-md-6">
                     <label class="form-label fw-bold" for="pf-phone">Telefono</label>
                     <input type="text" id="pf-phone" name="phone" class="form-control" value="<?php echo htmlspecialchars($user['phone'] ?? ''); ?>" autocomplete="tel">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-bold" for="pf-course">Corso di studi</label>
-                    <input type="text" id="pf-course" name="course" class="form-control" value="<?php echo htmlspecialchars($user['course'] ?? ''); ?>">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-bold" for="pf-password">Nuova password</label>

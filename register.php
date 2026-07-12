@@ -5,7 +5,6 @@ include 'includes/auth.php';
 $errors = [];
 $nameInput = '';
 $emailLocalInput = '';
-$courseInput = '';
 
 if (isset($_SESSION['user_id'])) {
     header('Location: ' . (is_admin() ? 'admin.php' : 'index.php'));
@@ -15,7 +14,6 @@ if (isset($_SESSION['user_id'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nameInput = trim($_POST['name'] ?? '');
     $emailLocalInput = trim($_POST['email'] ?? '');
-    $courseInput = trim($_POST['course'] ?? '');
     $password = $_POST['password'] ?? '';
     $confirm = $_POST['confirm'] ?? '';
 
@@ -34,9 +32,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($password !== $confirm) {
         $errors[] = 'Le password non coincidono.';
     }
-    if ($courseInput !== '' && !in_array($courseInput, ['Ingegneria e Scienze Informatiche', 'Architettura'], true)) {
-        $errors[] = 'Seleziona un corso di studi valido.';
-    }
 
     if (!$errors) {
         $stmt = mysqli_prepare($conn, "SELECT id FROM users WHERE email = ?");
@@ -51,9 +46,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             // Hash the password with bcrypt before saving it
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-            $course = $courseInput === '' ? null : $courseInput;
-            $stmt = mysqli_prepare($conn, "INSERT INTO users (name, email, password, role, course) VALUES (?, ?, ?, 'user', ?)");
-            mysqli_stmt_bind_param($stmt, "ssss", $nameInput, $email, $passwordHash, $course);
+            $stmt = mysqli_prepare($conn, "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, 'user')");
+            mysqli_stmt_bind_param($stmt, "sss", $nameInput, $email, $passwordHash);
             $success = mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
 
@@ -107,16 +101,6 @@ include 'includes/header.php';
                     <span class="input-group-text ac-mono text-muted">@studio.unibo.it</span>
                 </div>
                 <div class="form-text">Solo indirizzi <strong>@studio.unibo.it</strong> sono accettati.</div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label fw-bold" for="reg-course">Corso di studi <span class="text-muted fw-normal">(facoltativo)</span></label>
-                <?php $courseOptions = ['Ingegneria e Scienze Informatiche', 'Architettura']; ?>
-                <select id="reg-course" name="course" class="form-select">
-                    <option value="">Seleziona il corso…</option>
-                    <?php foreach ($courseOptions as $courseOption): ?>
-                        <option value="<?php echo htmlspecialchars($courseOption); ?>"<?php echo $courseInput === $courseOption ? ' selected' : ''; ?>><?php echo htmlspecialchars($courseOption); ?></option>
-                    <?php endforeach; ?>
-                </select>
             </div>
             <div class="mb-3">
                 <label class="form-label fw-bold" for="reg-password">Password</label>

@@ -272,11 +272,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
     $action = $_POST['action'];
     $name = trim($_POST['name'] ?? '');
     $email = trim($_POST['email'] ?? '');
-    $course = trim($_POST['course'] ?? '');
     $role = ($_POST['role'] ?? 'user') === 'admin' ? 'admin' : 'user';
     $status = ($_POST['status'] ?? 'active') === 'blocked' ? 'blocked' : 'active';
     $password = $_POST['password'] ?? '';
-    $courseValue = $course === '' ? null : $course;
 
     if ($name === '') {
         $errors[] = 'Il nome è obbligatorio.';
@@ -300,8 +298,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
         }
         if (!$errors && $userEmailError === '') {
             $hash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = mysqli_prepare($conn, "INSERT INTO users (name, email, password, role, status, course) VALUES (?, ?, ?, ?, ?, ?)");
-            mysqli_stmt_bind_param($stmt, "ssssss", $name, $email, $hash, $role, $status, $courseValue);
+            $stmt = mysqli_prepare($conn, "INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)");
+            mysqli_stmt_bind_param($stmt, "sssss", $name, $email, $hash, $role, $status);
             if (mysqli_stmt_execute($stmt)) {
                 log_change($conn, $adminId, 'create', 'user', mysqli_insert_id($conn), "Creato utente {$name}.");
                 $_SESSION['admin_flash'] = ['type' => 'success', 'message' => 'Utente creato.'];
@@ -316,11 +314,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
         $editId = (int) ($_POST['id'] ?? 0);
         if ($password !== '') {
             $hash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = mysqli_prepare($conn, "UPDATE users SET name=?, email=?, role=?, status=?, course=?, password=? WHERE id=?");
-            mysqli_stmt_bind_param($stmt, "ssssssi", $name, $email, $role, $status, $courseValue, $hash, $editId);
+            $stmt = mysqli_prepare($conn, "UPDATE users SET name=?, email=?, role=?, status=?, password=? WHERE id=?");
+            mysqli_stmt_bind_param($stmt, "sssssi", $name, $email, $role, $status, $hash, $editId);
         } else {
-            $stmt = mysqli_prepare($conn, "UPDATE users SET name=?, email=?, role=?, status=?, course=? WHERE id=?");
-            mysqli_stmt_bind_param($stmt, "sssssi", $name, $email, $role, $status, $courseValue, $editId);
+            $stmt = mysqli_prepare($conn, "UPDATE users SET name=?, email=?, role=?, status=? WHERE id=?");
+            mysqli_stmt_bind_param($stmt, "ssssi", $name, $email, $role, $status, $editId);
         }
         if (mysqli_stmt_execute($stmt)) {
             log_change($conn, $adminId, 'update', 'user', $editId, "Modificato utente {$name}.");
@@ -466,14 +464,14 @@ $editUser = null;
 if ($section === 'studenti') {
     if (isset($_GET['edit_user'])) {
         $euId = (int) $_GET['edit_user'];
-        $stmt = mysqli_prepare($conn, "SELECT id, name, email, role, status, course FROM users WHERE id = ?");
+        $stmt = mysqli_prepare($conn, "SELECT id, name, email, role, status FROM users WHERE id = ?");
         mysqli_stmt_bind_param($stmt, "i", $euId);
         mysqli_stmt_execute($stmt);
         $res = mysqli_stmt_get_result($stmt);
         $editUser = $res ? mysqli_fetch_assoc($res) : null;
         mysqli_stmt_close($stmt);
     }
-    $res = mysqli_query($conn, "SELECT id, name, email, role, status, course, created_at FROM users ORDER BY id DESC");
+    $res = mysqli_query($conn, "SELECT id, name, email, role, status, created_at FROM users ORDER BY id DESC");
     while ($res && $r = mysqli_fetch_assoc($res)) {
         $students[] = $r;
     }
@@ -828,10 +826,6 @@ $navItems = [
                                 </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label fw-bold" for="u-course">Corso</label>
-                                <input type="text" id="u-course" name="course" class="form-control" value="<?php echo htmlspecialchars($editUser['course'] ?? ''); ?>">
-                            </div>
-                            <div class="col-md-3">
                                 <label class="form-label fw-bold" for="u-password">Password</label>
                                 <input type="password" id="u-password" name="password" class="form-control" placeholder="<?php echo $editUser ? 'invariata' : 'obbligatoria'; ?>" <?php echo $editUser ? '' : 'required'; ?>>
                             </div>
@@ -847,14 +841,13 @@ $navItems = [
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">
-                                <tr><th scope="col" class="px-4">Nome</th><th scope="col">Email</th><th scope="col">Corso</th><th scope="col">Ruolo</th><th scope="col">Stato</th><th scope="col" class="text-end px-4">Azioni</th></tr>
+                                <tr><th scope="col" class="px-4">Nome</th><th scope="col">Email</th><th scope="col">Ruolo</th><th scope="col">Stato</th><th scope="col" class="text-end px-4">Azioni</th></tr>
                             </thead>
                             <tbody>
                             <?php foreach ($students as $u): ?>
                                 <tr>
                                     <td class="px-4 fw-bold"><?php echo htmlspecialchars($u['name']); ?></td>
                                     <td class="small"><?php echo htmlspecialchars($u['email']); ?></td>
-                                    <td class="small text-muted"><?php echo htmlspecialchars($u['course'] ?? '—'); ?></td>
                                     <td><?php echo $u['role'] === 'admin' ? '<span class="badge bg-dark">Admin</span>' : '<span class="badge badge-soft">Studente</span>'; ?></td>
                                     <td><?php echo $u['status'] === 'blocked' ? '<span class="badge bg-danger">Bloccato</span>' : '<span class="badge bg-success">Attivo</span>'; ?></td>
                                     <td class="text-end px-4">
