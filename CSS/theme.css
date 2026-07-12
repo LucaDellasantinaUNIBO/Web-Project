@@ -2,14 +2,14 @@
     --background: #f2ece2;
     --surface: #f6f1e8;
     --foreground: #2d2a26;
-    --primary: #c0592e;
-    --primary-dark: #a2491f;
+    --primary: #a2491f;
+    --primary-dark: #843a10;
     --primary-soft: #f5e3d6;
     --verified: #2e5a39;
     --verified-soft: #dcebe0;
     --card: #ffffff;
     --muted: #efe7da;
-    --muted-foreground: #8a7c6b;
+    --muted-foreground: #6f6252;
     --heart: #c0392b;
     --radius: 0.85rem;
     --border: rgba(45, 42, 38, 0.10);
