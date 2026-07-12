@@ -67,5 +67,16 @@ define('AC_CONFIRM_MODAL_RENDERED', true);
             });
         });
     });
+
+    document.querySelectorAll('.skip-link').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+            var target = document.getElementById((link.getAttribute('href') || '').replace('#', ''));
+            if (!target) { return; }
+            e.preventDefault();
+            target.setAttribute('tabindex', '-1');
+            target.focus();
+            target.scrollIntoView();
+        });
+    });
 })();
 </script>

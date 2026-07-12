@@ -63,7 +63,7 @@ profile.php        Profilo studente (richieste, dati, eliminazione account)
 admin.php          Pannello amministratore (CRUD, gestione)
 login.php / register.php / logout.php
 api/favorite.php   Endpoint salva/rimuovi preferito (AJAX + fallback)
-includes/          auth.php, header.php, footer.php, listings.php, wallet.php, confirm-modal.php (helper condivisi)
+includes/          auth.php, header.php, footer.php, listings.php, wallet.php, modal.php (helper condivisi)
 assets/            img/ (immagini degli alloggi per tipo), js/card-format.js
 CSS/               theme.css, style.css
 db/                db_config.php, schema.sql, seed.php
